@@ -1,0 +1,848 @@
+---
+title: "IIV in circadian rhythms"
+author: "Mari Velasque"
+date: "8/16/2019"
+output:
+  html_document: 
+    code_folding: "hide"
+    highlight: tango
+    keep_md: yes
+    theme: cosmo
+    toc: yes
+---
+
+This document was written in R Markdown, and translated into html using the R package *knitr*. To see the codes used to produce all tables and figures press the button _Code_ in the top of each chunk. Alternativelly, it also possible to see all codes used by pressing _Code_ located at the top of the document.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.path='figures/')
+knitr::opts_chunk$set(error = TRUE)
+```
+
+```{r libraries, message = FALSE, warning=FALSE}
+#Install missing packages and load all R libraries used in this analysis
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("tidyverse", "ggpubr", "MCMCglmm", "gridExtra", "psycho", 
+               "lme4", "ggsignif", "brms", "lattice", "lmerTest", "cowplot",
+               "tidybayes", "latticeExtra", "htmlTable", "magrittr", "DataCombine", 
+               "ggplot2", "kableExtra")
+##All done! 
+
+library(tidyverse)
+library(ggpubr)
+library(MCMCglmm)
+library(gridExtra)
+library(psycho)
+library(lme4)
+library(ggsignif)
+library(brms)
+library(lattice)
+library(lmerTest)
+library(cowplot)
+library(tidybayes)
+library(latticeExtra)
+library(kableExtra)
+library(htmlTable)
+library(magrittr)
+library(DataCombine)
+library(ggplot2)
+```
+
+### First lets check take a look in raw data
+
+```{r dall data, warning=FALSE}
+lightdark=read_csv("data/Experiment_2_data.csv", col_types = cols()) %>% 
+   dplyr::select( id="Animal", srtime="Time colected", treatment="Treatment",
+                  period = "Treatment order", obs = "Occasion", wt = "weight", 
+                  shellwt = "shell weight", temp = "temperature", sr = "startle response", 
+                  haemoabs = "haemocyanin",haemoporc= "haemocyaninporc", 
+                  mr="oxygen consumption")  %>% 
+   mutate(id, factor(id), srtime= factor(srtime), treatment = factor(treatment))
+
+#Add a second column merging time and treatment for posterior use
+lightdark = data.frame(lightdark %>% 
+                          unite(time_treatment, c(srtime, treatment), 
+                                sep = "_", remove = FALSE)) 
+
+```
+Closer inspection indicated that the treatment seems to have a significant effect on the startle reponse duration. The overdispersion of the measures (A), also suggests that Startle response duration should log~10~ transformed to improve normality (B).
+```{r raw data check, fig.width=8, fig.height=4}
+D1 <- lightdark %>% 
+   group_by(treatment) %>% 
+   ggplot(aes(x = as.factor(id), y = sr, color =treatment)) +
+   geom_point(alpha = 0.7) + labs(x = "Individual ID", 
+                                  y = "Startle response duration") + 
+   guides(fill=FALSE) + 
+   theme_classic() + 
+   theme(legend.position = "none") +
+   scale_color_manual(values=c("#172c3d", "orange")) 
+
+D2 <- lightdark %>% 
+   group_by(treatment) %>% 
+   ggplot(aes(x = as.factor(id), y = log10(sr+ 1), color =treatment)) +
+   geom_point(alpha = 0.7) + labs(x = "Individual ID", 
+                                  y = "Startle response duration (log 10)") + 
+   guides(fill=FALSE)  + theme_classic() + 
+   scale_color_manual(values=c("#172c3d", "orange")) 
+
+plot_grid(D1, D2,  labels = c('A', 'B'), label_size = 15)
+
+```
+<br> <br> _Fig S1._ Plot of startle reponse duration, raw data (A) and log~10~ transformed (B) per individual.  
+
+The effect of permanent light (a) and the interaction (b) between treatment and time (day or night) on the startle response duration of the hermit crab Pagurus bernhardus. We used hierarchical generalized linear models (HGLM) to predict the effect of permanent light and time on which the startle response was induced to predict its duration. 
+```{r, include=FALSE}
+load("MCMC_results.RData")
+
+```
+<br><br>
+
+# 1. The effect of permanent light on the startle response duration
+<br>
+
+## Model selection: comparing priors
+
+<br>
+To estimate the effects of permanent light in the startle response duration of hermit crabs, we fitted a hierarchical generalized linear models (HGLM) with the hermit crab individual ID as the grouping variable with a covariance matrix of effects (intercepts and slopes) for the period on which we perform the experiment. We also specified an repeatd covariance matrix for those effects (_us_) with an interaction with hermit crab individual ID, allowing for between-individual variation in startle responses and random slopes across the repeated observations, which allowed the presence of individual variation across the observations. We also assumed that the residuals were normally distributed and evenly split across each observation. For the fixed effects, we use a multivariate normal distribution with a zero mean vector and a diagonal matric with large variances (MCMCglmm default setting). In all models the startle response duration (sr) was log-transformed (log~10~ + 1), ensuring that the total variance was evenly split across each observation. For our G-Repeat and R-Repeat, we specified four flat non-informative priors with an repeatd covariance matrix (V) and residual variances with varying degree of belief (_nu_) and with a covariance matrix (_alpha.V_) for the redundant working parameters. We evaluated our posterior distribution and the general model fir under the following primers:
+<br><br>
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+   - Prior 1 = Flat non-informative with a constrained (co)variance Repeat, degree of belief = 1.002 and a prior distribution for the non-identified working parameters = 100 (i.e  V = diag(1), nu =1.002, alpha.V=100)<br>
+   - Prior 2 = Flat non-informative with a constrained (co)variance Repeat, degree of belief = 0.002 and a prior distribution for the non-identified working parameters = 100 (i.e  V = diag(1), nu =0.002, alpha.V=1000)
+  - Prior 3 = Flat non-informative with a constrained (co)variance Repeat, degree of belief = 1.002 and a prior distribution for the non-identified working parameters = 100 (i.e  V = diag(1), nu =1.002, alpha.V=1000)
+  - Prior 4 = Flat non-informative with a constrained (co)variance Repeat, degree of belief = 0.002 and a prior distribution for the non-identified working parameters = 100 (i.e  V = diag(1), nu =0.002, alpha.V=100)
+  </div>
+<br>
+
+```{r mean effect model, eval=FALSE}
+##adding differnt priors to test the best model fit
+
+prior1.1<-list(R = list(V = diag(1), nu = 1.002), 
+               G = list(G1 = list(V = diag(1), nu =1.002, alpha.V=100),
+                        G2 = list(V = diag(1), nu =1.002, alpha.V=100)))
+
+prior1.2<-list(R = list(V = diag(1), nu = 0.002), 
+               G = list(G1 = list(V = diag(1), nu =0.002, alpha.V=1000),
+                        G2 = list(V = diag(1), nu =0.002, alpha.V=1000)))
+
+prior1.3<-list(R = list(V = diag(1), nu = 1.002), 
+               G = list(G1 = list(V = diag(1), nu =1.002, alpha.V=1000),
+                        G2 = list(V = diag(1), nu =1.002, alpha.V=1000)))
+
+prior1.4<-list(R = list(V = diag(1), nu = 0.002), 
+               G = list(G1 = list(V = diag(1), nu =0.002, alpha.V=100),
+                        G2 = list(V = diag(1), nu =0.002, alpha.V=1000)))
+
+M1.1 <- MCMCglmm(log(sr+1) ~ srtime + treatment +  obs + 
+                    wt + haemoporc + treatment*srtime
+               , random=~ idh(id):units + period
+               , prior= prior1.1, family="gaussian"
+               , pl=TRUE, pr= TRUE
+               , saveX = TRUE , saveZ = TRUE
+               , data=lightdark, DIC= T
+               , singular.ok = TRUE
+               , nitt=500000, thin=100, burnin=50000,verbose = F) 
+
+M1.2 <- MCMCglmm(log(sr+1) ~ srtime + treatment +  obs +  
+                    wt + haemoporc + treatment*srtime
+               , random=~ idh(id):units + period
+               , prior= prior1.2, family="gaussian"
+               , pl=TRUE, pr= TRUE
+               , saveX = TRUE , saveZ = TRUE
+               , data=lightdark, DIC= T
+               , singular.ok = TRUE
+               , nitt=500000, thin=100, burnin=50000,verbose = F) 
+
+M1.3 <- MCMCglmm(log(sr+1) ~ srtime + treatment +  obs + 
+                    wt + haemoporc + treatment*srtime
+               , random=~ idh(id):units + period
+               , prior= prior1.3, family="gaussian" 
+               , pl=TRUE, pr= TRUE
+               , saveX = TRUE , saveZ = TRUE
+               , data=lightdark, DIC= T
+               , singular.ok = TRUE
+               , nitt=500000, thin=100, burnin=50000,verbose = F) 
+
+M1.4 <- MCMCglmm(log(sr+1) ~ srtime + treatment +  obs + 
+                    wt + haemoporc + treatment*srtime
+               , random=~ idh(id):units + period
+               , prior= prior1.4, family="gaussian"
+               , pl=TRUE, pr= TRUE
+               , saveX = TRUE , saveZ = TRUE
+               , data=lightdark, DIC= T
+               , singular.ok = TRUE
+               , nitt=500000, thin=100, burnin=50000,verbose = F) 
+```
+
+#### MCMCglmm prior comparison for fixed effects
+
+```{r results priors, results='asis', eval=FALSE}
+MME <- c("Intercept", "Time","Treatment", "Occcasion", 
+         "Weight", "Haemocyanin concentration", "Treatment x Time") 
+RI = c("Hermit Crab ID", "Period", "Occcasion")
+
+Prior_1_MME =as_tibble(cbind("MME" = MME, 
+                             "Effective size" = effectiveSize(M1.1$Sol)[1:7], 
+                             "Autocorrelation diagnostics" = (diag(autocorr(M1.1$Sol)[2,,]))[1:7]))
+
+Prior_1_COV= as_tibble(cbind( "RI" = RI, 
+                              "Effective size" = effectiveSize(M1.1$VCV), 
+                              "Autocorrelation diagnostics" = diag(autocorr(M1.1$VCV)[2,,])))
+
+Prior_2_MME =as_tibble(cbind("MME" = MME, 
+                             "Effective size" = effectiveSize(M1.2$Sol)[1:7],
+                             "Autocorrelation diagnostics" = (diag(autocorr(M1.2$Sol)[2,,]))[1:7]))
+
+Prior_2_COV= as_tibble(cbind( "RI" = RI, 
+                              "Effective size" = effectiveSize(M1.2$VCV), 
+                              "Autocorrelation diagnostics" = diag(autocorr(M1.2$VCV)[2,,])))
+
+Prior_3_MME =as_tibble(cbind("MME" = MME, 
+                             "Effective size" = effectiveSize(M1.3$Sol)[1:7], 
+                             "Autocorrelation diagnostics" = (diag(autocorr(M1.3$Sol)[2,,]))[1:7]))
+
+Prior_3_COV= as_tibble(cbind( "RI" = RI, 
+                              "Effective size" = effectiveSize(M1.3$VCV),
+                              "Autocorrelation diagnostics" = diag(autocorr(M1.3$VCV)[2,,])))
+
+Prior_4_MME =as_tibble(cbind("MME" = MME, 
+                             "Effective size" = effectiveSize(M1.4$Sol)[1:7],
+                             "Autocorrelation diagnostics" = (diag(autocorr(M1.4$Sol)[2,,]))[1:7]))
+
+Prior_4_COV= as_tibble(cbind( "RI" = RI, 
+                              "Effective size" = effectiveSize(M1.4$VCV), 
+                              "Autocorrelation diagnostics" = diag(autocorr(M1.4$VCV)[2,,])))
+
+Priors_MME<- as_tibble(rbind(Prior_1_MME,Prior_2_MME,Prior_3_MME,Prior_4_MME)) 
+Priors_COV<- as_tibble(rbind(Prior_1_COV,Prior_2_COV,Prior_3_COV,Prior_4_COV)) 
+
+Priors_MME <- Priors_MME %>% 
+   mutate_at(c( "Effective size", "Autocorrelation diagnostics"), as.numeric) %>% 
+   mutate_at(vars( "Effective size"), funs(round(., 0))) %>%
+   mutate_at(vars("Autocorrelation diagnostics"), funs(round(., 4)))
+
+Priors_COV <- Priors_COV %>%
+   mutate_at(c( "Effective size", "Autocorrelation diagnostics"), as.numeric) %>% 
+   mutate_at(vars( "Effective size"), funs(round(., 0))) %>% 
+   mutate_at(vars("Autocorrelation diagnostics"), funs(round(., 4)))
+```
+
+
+```{r results priors1.2, results='asis', warning=FALSE}
+htmlTable(as.data.frame(Priors_MME[,-1]), 
+    #     header = paste("Effective size","Autocorrelation diagnostics"),
+         rnames = paste(c(Priors_MME$MME)),
+         rgroup = c("Prior 1","Prior 2", "Prior 3", "Prior 4"),
+         n.rgroup = c(7, 7, 7, 7), 
+      #   cgroup = c("Effective size","Autocorrelation diagnostics"),
+      #   n.cgroup = c(1,1), 
+      #   col.rgroup = c(rows=c(AD1),"#c95400"),
+      #   col.rgroup = c(rows=c(AD2),"#c95400"),
+         caption="Table S1: Effective size and autocorrelation diagnostic of fixed effects obtained from the MCMC model with four different priors",
+         tfoot="To detect proper convergence, autocorrelation diagnostics should be < 0.1")
+```
+
+<br>
+
+#### MCMCglmm prior comparison for random effects
+
+```{r checking results fixed effects 2, results='asis', warning=FALSE}
+htmlTable(as.data.frame(Priors_COV[,-1]), 
+    #     header = paste("Effective size","Autocorrelation diagnostics"),
+        rnames = paste(c(Priors_COV$RI)),
+         rgroup = c("Prior 1","Prior 2", "Prior 3", "Prior 4"),
+         n.rgroup = c(3,3,3,3), 
+      #   cgroup = c("Effective size","Autocorrelation diagnostics"),
+      #   n.cgroup = c(1,1), 
+      #   col.rgroup = c(rows=c(AD1),"#c95400"),
+      #   col.rgroup = c(rows=c(AD2),"#c95400"),
+         caption="Table S2: Effective size and autocorrelation diagnostic of random effects obtained from the MCMC model with four different priors",
+         tfoot="To detect proper convergence, autocorrelation diagnostics should be < 0.1")
+```
+<br>
+### Model selection: comparing Deviance Information Criterion (DIC)
+
+```{r comparing models fixed effects}
+Value<- c(M1.1$DIC,  M1.2$DIC,  M1.3$DIC,  M1.4$DIC)
+
+Prior<- c("Prior 1", "Prior 2", "Prior 3", "Prior 4")
+
+Results = as.matrix(data.frame(Prior,Value)) 
+htmlTable(Results,  
+         ctable=c("solid", "double"),
+        cspan.rgroup = 2,
+       caption="Table S3: Comparion of DIC output between four different priors")
+```
+<br>
+All models ran for 500,000 interactions, with a thinning interval of 100 and a burn-in of 50000. This resulted in ~4500 samples for which the autocorrelation between samples was was less than 0.01 using prior 4. We also shown the Deviance Information Criterion (DIC). Only *prior 4* had proper convergency of fixed and random effects, and thus, was used in this analysis.
+<br><br>
+
+The effect of permanent light on the startle response duration of hermit crabs
+```{r plot mean effect for sr, fig.width=8, fig.height=4}
+preds<- c(predict(M1.4, marginal = NULL, type = "response"))
+
+lightdark$prediction = preds
+
+g1<- lightdark %>% 
+   group_by(treatment) %>% 
+   ggplot(aes(x =time_treatment, y = prediction, fill =time_treatment)) +
+   geom_boxplot(size = 0.75, width = 0.25) + labs(x = "Treatment", 
+                                                  y = "Startle response duration (predicted)") +
+   scale_fill_manual(values=c("orange", "orange", "#172c3d", "orange")) + 
+   guides(fill=FALSE) +
+   scale_x_discrete(labels = c("LD during day", "PL during day", 
+                               "LD during night", "PL during night")) + 
+   theme_classic() 
+
+g2<- lightdark %>% 
+   group_by(treatment) %>% 
+   ggplot(aes(x =treatment, y = prediction, fill =treatment)) +
+   geom_boxplot(size = 0.75, width = 0.25) + labs(x = "Treatment", 
+                                                  y = "Startle response duration (predicted)") +
+   scale_fill_manual(values=c("#172c3d", "orange")) + 
+   guides(fill=FALSE)  +
+   theme_classic() 
+
+
+plot_grid(g2, g1,  labels = c('A', 'B'), label_size = 15)
+```
+<br> _Fig S2._ The effect of permanent light (a) and the interaction (b) between treatment and time (day or night) on the startle response duration of the hermit crab Pagurus bernhardus. We used the HGLM model to predict the startle response duration. 
+
+<br>
+
+#### Summary of the results:
+
+```{r result table 1, warning=FALSE}
+MME1 <- c("Intercept", "Time","Treatment", 
+          "Occcasion", "Weight", "Haemocyanin concentration",
+          "Treatment x Time") 
+
+M1.results<-as.data.frame(summary(M1.4)$solutions)
+M1.results<- tibble::rownames_to_column(M1.results, "Parameter name")
+
+M1.results<- M1.results %>% 
+   dplyr::select("Parameter name", "Posterior mean"="post.mean", 
+                 "95% CI lower"="l-95% CI", "95% CI upper"="u-95% CI",
+                 "p"="pMCMC") %>% 
+   mutate_at(c( "Posterior mean","95% CI lower","95% CI upper","p"),as.numeric) %>%
+   mutate_at(vars("Posterior mean","95% CI lower","95% CI upper"), funs(round(., 4))) %>%
+   mutate_at(vars("p"), funs(round(., 4)))
+
+htmlTable(as.data.frame(M1.results[,-1]), 
+          rnames = paste(c(MME1)),
+          caption="Table S4: Posterior summary statistics for the mean effect of startle response, showing posterior mean, lower and upper 95% CIs and P-values. Results are given for fixed effects only")
+
+```
+
+```{r result table 2}
+Gcov<-summary(M1.4)$Gcovariances
+Random_effects<- as_tibble(rbind(Gcov, "Rcov" = summary(M1.4)$Rcovariances))
+RE<- c("Hermit Crab ID", "Period", "Occcasion")
+
+Random_effects = Random_effects %>% 
+   dplyr::select("Posterior mean"="post.mean", "95% CI lower"="l-95% CI", 
+                 "95% CI upper"="u-95% CI") %>% 
+   mutate_at(c( "Posterior mean","95% CI lower","95% CI upper"),as.numeric) %>%
+   mutate_at(vars("Posterior mean","95% CI lower","95% CI upper"), funs(round(., 4)))
+
+htmlTable(as.data.frame(Random_effects), 
+          rnames = paste(c(RE)),
+          caption="Table S5: Posterior summary statistics for the mean effect of startle response, showing posterior mean, lower and upper 95% CIs. Results are given for random effects only.")
+```
+<br><br>
+
+# 2. Comparing the repeatability and variance components of startle responses
+
+## Model selection: comparing priors
+<br>
+We first need to specify priors for random effects. Because our main focus is to determine the between and within-individual variation in startle response, determining the Repeat of our (co)variance matrix is extremely important. For the fixed effects, we use a multivariate normal distribution with a zero mean vector and a diagonal matric with large variances (MCMCglmm default setting). For our G-Repeat and R-Repeat, we specified priors with a (co)varianceriance matrix assumed to have an inverse-Wishart prior distribution and individual elements for each element of the variance component (e.g. period). In all models, we used a variance Repeat with diagonal matrices (implying a priori independence between each startle response measurement and the period on which the data was collected). In the model, startle response duration (sr) was log-transformed (log~10~), ensuring that the toral variance was evenly split across each observation. 
+We specified four different models with varying levels of inverse-Wishart with scale and with varying degree of belief (_nu_). This is important, as inverse-Wishart priors can be problematic as it specifies a conjugate prior, which specify an _a priori_dependence between correlations and variances, impacting the estimation of the covariance matrix. Thus, we used several types of prior with differing properties, in order to evaluate the sensitivity of our conclusions according to the prior specifications. We evaluated our posterior distribution and the general model fir under the following primers:
+<br>
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+   - Prior 1 = inverse-Wishart without scale and degree of belief = 3.002 (i.e V=diag(4)/3.002, nu= 3.002)
+   - Prior 2= inverse-Wishart without scale and degree of belief = 1.002 (i.e V=diag(4)/1.002, nu= 1.002)
+   - Prior 3 = inverse-Wishart with scale = I^1e-6 and degree of belief 3.002 (i.e V=diag(4)^(1e-6/3.002), nu= 3.002)
+   - Prior 4 = parameter expended prior with scale = I and degree of belief = 3 (i.e. V=diag(4)/3, nu=3)
+   - Prior 5 = parameter expended prior without scale, degree of belief = 1.002 (i.e. V=diag(4), nu=1.002) and with (co)varianceriance matrix constrained to 0
+</div>
+<br>
+
+```{r IIV model, warning = FALSE, eval=FALSE}
+prior2.1<- list(R=list(V=diag(4)/3.002, nu= 3.002),
+                G=list(G1=list(V=diag(4)/3.002, nu= 3.002)))
+
+prior2.2<- list(R=list(V=diag(4)/1.002, nu= 1.002), 
+                G=list(G1=list(V=diag(4)/1.002, nu= 1.002)))
+
+prior2.3<- list(R=list(V=diag(4)*(1e-6/3.002), nu= 3.002), 
+                G=list(G1=list(V=diag(4)*(1e-6/3.002), nu= 3.002)))
+
+prior2.4<- list(R=list(V=diag(4)/3, nu=3), 
+                G=list(G1=list(V=diag(4)/3, nu=3)))
+
+prior2.5<- list(R=list(V=diag(4), nu=1.002), 
+                G=list(G1=list(V=diag(4), nu=1.002)))
+
+
+IIV_matrix<-matrix(c("VID_Day_LD",0,0,0,
+                     0,"VID_Night_LD",0,0,
+                     0,0,"VID_Day_PL",0,
+                     0,0,0,"VID_Night_PL"),
+                   nrow=4,ncol=4,byrow=T)
+
+###Model 1
+M2.1 <-MCMCglmm(log(sr+1)~  srtime + treatment + obs + 
+                   wt + haemoporc + treatment*srtime + treatment*period
+              , random=~ idh(time_treatment):id
+              , rcov=~idh(time_treatment):units
+              , prior= prior2.1
+              , family="gaussian"
+              , data=lightdark
+              , singular.ok=TRUE
+              , DIC= T
+              , nitt=500000, thin=100, burnin=50000,verbose = F) 
+
+###Model 2
+
+M2.2 <-  MCMCglmm(log(sr+1)~  srtime + treatment + obs + 
+                     wt + haemoporc + treatment*srtime + treatment*period
+                , random=~ idh(time_treatment):id
+                , rcov=~idh(time_treatment):units
+                , prior= prior2.2
+                , family="gaussian"
+                , data=lightdark
+                , singular.ok=TRUE
+                , DIC= T
+                , nitt=500000, thin=100, burnin=50000,verbose = F) 
+
+### Model 3
+
+M2.3 <- MCMCglmm(log(sr+1)~  srtime + treatment + obs + 
+                    wt + haemoporc + treatment*srtime + treatment*period
+               , random=~ idh(time_treatment):id
+               , rcov=~idh(time_treatment):units
+               , prior= prior2.3
+               , family="gaussian"
+               , data=lightdark
+               , singular.ok=TRUE
+               , DIC= T
+               , nitt=500000, thin=100, burnin=50000,verbose = F) 
+
+### Model 4
+
+M2.4 <-MCMCglmm(log(sr+1)~  srtime + treatment + obs + 
+                   wt + haemoporc + treatment*srtime + treatment*period
+              , random=~ idh(time_treatment):id
+              , rcov=~idh(time_treatment):units
+              , prior= prior2.4
+              , family="gaussian"
+              , data=lightdark
+              , singular.ok=TRUE
+              , DIC= T
+              , nitt=500000, thin=100, burnin=50000,verbose = F) 
+
+### Model 5
+
+M2.5 <- MCMCglmm(log(sr+1)~ srtime + treatment + obs +  
+                    wt + haemoporc + treatment*srtime + treatment*period
+               , random=~ idh(time_treatment):id
+               , rcov=~idh(time_treatment):units
+               , prior= prior2.5
+               , family="gaussian"
+               , data=lightdark
+               , singular.ok=TRUE
+               , DIC= T
+               , nitt=500000, thin=100, burnin=50000,verbose = F)  
+```
+
+```{r checking results, results='asis', warning=FALSE}
+MME <- c("Intercept", "Time","Treatment", "Occcasion", 
+         "Weight", "Haemocyanin concentration","Period", 
+         "Treatment x Time", "Treatment x Period") 
+
+Prior_1 =as_tibble(cbind("MME" = MME, "MME solutions (ES)" = effectiveSize(M2.1$Sol),
+                         "(co)variance matrices(ES)" = effectiveSize(M2.1$VCV), 
+                         "MME solutions (AC)" = diag(autocorr(M2.1$Sol)[2, , ]), 
+                         "(co)variance matrices (AC)" = diag(autocorr(M2.1$VCV)[2, , ])))
+
+Prior_2=as_tibble(cbind("MME" = MME, "MME solutions (ES)" = effectiveSize(M2.2$Sol),
+                        "(co)variance matrices(ES)"= effectiveSize(M2.2$VCV), 
+                        "MME solutions (AC)" = diag(autocorr(M2.2$Sol)[2, , ]), 
+                        "(co)variance matrices (AC)" = diag(autocorr(M2.2$VCV)[2, , ])))
+
+Prior_3=as_tibble(cbind("MME" = MME, "MME solutions (ES)" = effectiveSize(M2.3$Sol), 
+                        "(co)variance matrices(ES)" = effectiveSize(M2.3$VCV), 
+                        "MME solutions (AC)" = diag(autocorr(M2.3$Sol)[2, , ]), 
+                        "(co)variance matrices (AC)" = diag(autocorr(M2.3$VCV)[2, , ])))
+
+Prior_4=as_tibble(cbind("MME" = MME, "MME solutions (ES)" = effectiveSize(M2.4$Sol), 
+                        "(co)variance matrices(ES)" = effectiveSize(M2.4$VCV),
+                        "MME solutions (AC)" = diag(autocorr(M2.4$Sol)[2, , ]), 
+                        "(co)variance matrices (AC)" = diag(autocorr(M2.4$VCV)[2, , ])))
+
+Prior_5=as_tibble(cbind("MME" = MME, "MME solutions (ES)" = effectiveSize(M2.5$Sol), 
+                        "(co)variance matrices(ES)" = effectiveSize(M2.5$VCV), 
+                        "MME solutions (AC)" = diag(autocorr(M2.5$Sol)[2, , ]),
+                        "(co)variance matrices (AC)" = diag(autocorr(M2.5$VCV)[2, , ])))
+
+
+Priors<- as_tibble(rbind(Prior_1,Prior_2,Prior_3,Prior_4,Prior_5)) 
+
+Priors<- Priors %>% 
+   mutate_at(c( "MME solutions (ES)", "(co)variance matrices(ES)", 
+                "MME solutions (AC)","(co)variance matrices (AC)"),as.numeric) %>% 
+   mutate_at(vars( "MME solutions (ES)", "(co)variance matrices(ES)"), funs(round(., 0))) %>%
+   mutate_at(vars("MME solutions (AC)","(co)variance matrices (AC)"), funs(round(., 4)))
+
+htmlTable(as.data.frame(Priors[,-1]), 
+          header =   paste(c("MME solutions", "(co)variance matrices", 
+                             "MME solutions","(co)variance matrices")),
+          rnames = paste(c(Priors$MME)),
+          rgroup = c("Prior 1","Prior 2", "Prior 3", "Prior 4", "Prior 5"),
+          n.rgroup = c(9, 9,9, 9, 9), 
+          cgroup = c("Effective size","Autocorrelation diagnostics"),
+          n.cgroup = c(2,2), 
+          #          col.rgroup = c(rows=c(AD1),"#c95400"),
+          #          col.rgroup = c(rows=c(AD2),"#c95400"),
+          caption="Table S6: Effective size and autocorrelation diagnostic the MCMC model with five different priors",
+          tfoot="To detect proper convergence, autocorrelation diagnostics should be < 0.1")
+```
+<br>
+### Model selection: comparing Deviance Information Criterion (DIC)
+
+```{r comparing models IIV}
+Value<- c(M2.1$DIC,  M2.2$DIC,  M2.3$DIC,  M2.4$DIC,  M2.5$DIC)
+
+Prior<- c("Prior 1", "Prior 2", "Prior 3", "Prior 4", "Prior 5")
+
+Results = as.matrix(data.frame(Prior,Value)) 
+htmlTable(Results,  
+          ctable=c("solid", "double"),
+          cspan.rgroup = 2,
+          caption="Table S7: Comparion of DIC output between five different priors")
+
+```
+<br>
+
+All models ran for 500,000 interactions, with a thinning interval of 100 and a burn-in of 50000. This resulted in ~4500 samples for which the autocorrelation between samples was less than 0.01. Thus, we chose the model with the lowest Deviance Information Criterion (DIC). All analysis gave very similar results, but we used the *prior 2* in the subsequential analysis.
+<br><br>
+
+
+## Comparing repeatability across treatment groups and time on which startle response duration was measured
+
+We began by estimating the posterior modes for the repeatabilities across experimental blocks (i.e. treatment PL during the day, treatment PL during the night, treatment LD during the day and treatment LD during the night). 
+
+```{r repeatability behaviour, warning=F, fig.width=6, fig.height=4}
+
+#Repeatability of day measures in the light and dark treatment
+VID_Day_LD = M2.2$VCV[,1]; VR_Day_LD = M2.2$VCV[,5]
+R_Day_LD = VID_Day_LD/(VID_Day_LD + VR_Day_LD)
+
+#Repeatability of day measures in the permanent light treatment
+VID_Day_PL = M2.2$VCV[,2]; VR_Day_PL = M2.2$VCV[,6] 
+R_Night_LD = VID_Day_PL/(VID_Day_PL +  VR_Day_PL)
+
+#Repeatability of  night measures in the light and dark treatment
+VID_Night_LD = M2.2$VCV[,3]; VR_Night_LD = M2.2$VCV[,7]
+R_Day_PL = VID_Night_LD/(VID_Night_LD + VR_Night_LD)
+
+#Repeatability of night measures in the permanent light treatment
+
+VID_Night_PL = M2.2$VCV[,4]; VR_Night_PL = M2.2$VCV[,8]
+R_Night_PL = VID_Night_PL/(VID_Night_PL + VR_Night_PL)
+
+#Difference in repeatability between day and night in the permanent light treatment
+deltaR_PL = (R_Day_PL - R_Night_PL)
+
+#Difference in repeatability between day and night in the light and dark treatment
+deltaR_LD = (R_Day_LD - R_Night_LD)
+
+#Difference in repeatability between permanent light and the light and dark treatment during day
+deltaR_Day = (R_Day_PL - R_Day_LD)
+
+#Difference in repeatability between day and night in the light and dark treatment
+deltaR_Night = (R_Night_PL - R_Night_LD)
+
+
+deltas<-  paste0("\u0394", c(" PL", " LD", " Day", " Night"))
+
+Repeat<-data_frame(
+   name = c("Day LD", "Night LD", "Day PL", "Night PL",deltas),
+   mean =  c(posterior.mode(R_Day_LD), posterior.mode(R_Night_LD),
+             posterior.mode(R_Day_PL), posterior.mode(R_Night_PL), 
+             posterior.mode(deltaR_PL), posterior.mode(deltaR_LD),
+             posterior.mode(deltaR_Day), posterior.mode(deltaR_Night)), 
+   lower =  c(HPDinterval(R_Day_LD)[1], HPDinterval(R_Night_LD)[1],
+              HPDinterval(R_Day_PL)[1], HPDinterval(R_Night_PL)[1], 
+              HPDinterval(deltaR_PL)[1], HPDinterval(deltaR_LD)[1], 
+              HPDinterval(deltaR_Day)[1], HPDinterval(deltaR_Night)[1]),
+   upper =  c(HPDinterval(R_Day_LD)[2], HPDinterval(R_Night_LD)[2],
+              HPDinterval(R_Day_PL)[2], HPDinterval(R_Night_PL)[2],
+              HPDinterval(deltaR_PL)[2], HPDinterval(deltaR_LD)[2],
+              HPDinterval(deltaR_Day)[2], HPDinterval(deltaR_Night)[2]),
+   Type = c("Repeatability", "Repeatability", "Repeatability", "Repeatability", "\u0394", "\u0394", "\u0394", "\u0394"))
+
+
+
+plt1 <- ggplot(Repeat, aes(x = name, y = mean, ymin = upper, ymax = lower)) +
+   geom_linerange(aes(color =  name), size = 1, alpha = 0.5) +
+   geom_point(aes(color = name), 
+              position=position_dodge(width=c(0.6,0.4)), size = 3) +
+   coord_flip() + labs(y = "Posterior mean", x = "Treatment") + 
+   geom_hline(yintercept = 0)  + 
+   
+   labs(colour= "Repeatability estimates") +
+   
+   theme_bw()
+
+
+plt1 +  scale_color_manual(values=c("orange", "orange","#172c3d", "orange",
+                                  "orange", "#a88f0f", "#a88f0f", "orange" )) +
+   scale_fill_manual(values=c("orange", "orange","#172c3d", "orange", 
+                              "orange", "#a88f0f", "#a88f0f", "orange")) +
+   theme(legend.position = "none") 
+```
+<br> _Fig S3._ Forest plot for the repeatability estimates between treatment groups within periods and ∆R of differences between treatments (∆R = PL-LD) and between the time on which the startle response was induced ∆R (Night-Day). Repeatability and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
+
+<br>
+```{r table repeatability}
+Repeat <- Repeat %>% 
+   mutate_at(c( "mean","lower", "upper"),as.numeric) %>% 
+   mutate_at(vars("mean","lower", "upper"), funs(round(., 3))) %>%
+   select("name", "mean","lower", "upper")
+
+repeat_L<- c("Repeatability estimate", paste0("\u0394", " Repeatability"))
+htmlTable(as.data.frame(Repeat[,-1]), 
+          header =   paste(c("Posterior mean","95% CI lower","95% CI upper")),
+          rnames = paste(c(Repeat$name)),
+          rgroup = c(repeat_L),
+          n.rgroup = c(4, 4), 
+          #          col.rgroup = c(rows=c(AD1),"#c95400"),
+          #          col.rgroup = c(rows=c(AD2),"#c95400"),
+          caption="Table S8: Repeatability estimates and differences in repeatability (∆R) in startle response duration between treatment groups within time",
+          tfoot= "Differences between treatments and time (∆R) was estimated as PL - LD and was Day - Night")
+```
+
+<br><br>
+
+## Comparing between-individual variation across treatment groups and time on which startle response duration was measured
+
+<br>
+```{r VID, fig.width=6, fig.height=4, warning =FALSE}
+#Between-individual variation during PL treatment morning versus night 
+deltaVID_PL = VID_Day_PL - VID_Night_PL    
+#Between-individual variation during LD treatment morning versus night 
+deltaVID_LD = VID_Day_LD -VID_Night_LD   
+#Between-individual variation morning PL treatment versus LD treatment  
+deltaVID_Day = VID_Day_PL - VID_Day_LD       
+#Between-individual variation night PL treatment versus LD treatment  
+deltaVID_Night = VID_Night_PL - VID_Night_LD       
+
+VID<-data_frame(
+   name = c("Day LD", "Night LD", "Day PL", "Night PL",deltas),
+   mean =  c(posterior.mode(VID_Day_LD), posterior.mode(VID_Night_LD),
+             posterior.mode(VID_Day_PL), posterior.mode(VID_Night_PL),
+             posterior.mode(deltaVID_PL), posterior.mode(deltaVID_LD),
+             posterior.mode(deltaVID_Day), posterior.mode(deltaVID_Night)), 
+   lower =  c(HPDinterval(VID_Day_LD)[1], HPDinterval(VID_Night_LD)[1],
+              HPDinterval(VID_Day_PL)[1], HPDinterval(VID_Night_PL)[1],
+              HPDinterval(deltaVID_PL)[1], HPDinterval(deltaVID_LD)[1],
+              HPDinterval(deltaVID_Day)[1], HPDinterval(deltaVID_Night)[1]),
+   upper =  c(HPDinterval(VID_Day_LD)[2], HPDinterval(VID_Night_LD)[2],
+              HPDinterval(VID_Day_PL)[2], HPDinterval(VID_Night_PL)[2],
+              HPDinterval(deltaVID_PL)[2], HPDinterval(deltaVID_LD)[2],
+              HPDinterval(deltaVID_Day)[2], HPDinterval(deltaVID_Night)[2]),
+   Type = c("Repeatability", "Repeatability", "Repeatability", 
+            "Repeatability", "\u0394", "\u0394", "\u0394", "\u0394"))
+
+plt2 <- ggplot(VID, aes(x = name, y = mean, ymin = upper, ymax = lower)) +
+   geom_linerange(aes(color =  name), size = 1, alpha = 0.5) +
+   geom_point(aes(color = name), 
+              position=position_dodge(width=c(0.6,0.4)), size = 3) +
+   coord_flip() + 
+   labs(y = "Posterior mean", x = "Treatment") +  
+   
+   labs(colour= "Between-individual variation") +
+   geom_hline(yintercept = 0)  + 
+   theme_bw()
+
+
+plt2 +  scale_color_manual(values=c("orange", "orange","#172c3d", "orange",
+                                  "orange", "#a88f0f", "#a88f0f", "orange" )) +
+   scale_fill_manual(values=c("orange", "orange","#172c3d", "orange",
+                              "orange", "#a88f0f", "#a88f0f", "orange")) +
+   theme(legend.position = "none") 
+
+```
+<br> _Fig S4._ Forest plot for between-individual variation between treatment groups within periods and ∆R of differences between treatments (∆R = PL-LD) and between the time on which the startle response was induced ∆R (Night-Day). Between-individual variation and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
+<br>
+```{r table VID}
+VID <- VID %>% 
+   mutate_at(c( "mean","lower", "upper"),as.numeric) %>% 
+   mutate_at(vars("mean","lower", "upper"), funs(round(., 3))) %>% 
+   select("name", "mean","lower", "upper")
+
+repeat_VID<- c("Repeatability estimate", paste0("\u0394", " Variance"))
+
+htmlTable(as.data.frame(VID[,-1]), 
+          header =   paste(c("Posterior mean","95% CI lower","95% CI upper")),
+          rnames = paste(c(Repeat$name)),
+          rgroup = c(repeat_VID),
+          n.rgroup = c(4, 4), 
+          #          col.rgroup = c(rows=c(AD1),"#c95400"),
+          #          col.rgroup = c(rows=c(AD2),"#c95400"),
+          caption="Table S9:Between-individual variation (VBI) and differences in VBI (∆V) in startle response duration between treatment groups within time",
+          tfoot= "Differences between treatments and time (∆V) was estimated as PL - LD and was Day - Night")
+
+```
+<br><br>
+
+## Comparing within-individual variation across treatment groups and time on which startle response duration was measured
+
+<br>
+```{r WID, fig.width=6, fig.height=4, warning=FALSE}
+# Within-individual variation during PL treatment morning versus night  
+deltaVR_PL = VR_Day_PL - VR_Night_PL 
+# Within-individual variation during LD treatment morning versus night   
+deltaVR_LD = VR_Day_LD - VR_Night_LD     
+# Within-individual variation morning PL treatment versus LD treatment   
+deltaVR_Day = VID_Day_PL - VID_Day_LD        
+# Within-individual variation night PL treatment versus LD treatment   
+deltaVR_Night = VR_Night_PL - VR_Night_LD       
+
+WID<-data_frame(
+   name = c("Day LD", "Night LD", "Day PL", "Night PL",deltas),
+   mean =  c(posterior.mode(VID_Day_LD), posterior.mode(VID_Night_LD),
+             posterior.mode(VID_Day_PL), posterior.mode(VID_Night_PL),
+             posterior.mode(deltaVR_PL), posterior.mode(deltaVR_LD), 
+             posterior.mode(deltaVR_Day), posterior.mode(deltaVR_Night)), 
+   lower =  c(HPDinterval(VID_Day_LD)[1], HPDinterval(VID_Night_LD)[1],
+              HPDinterval(VID_Day_PL)[1], HPDinterval(VID_Night_PL)[1],
+              HPDinterval(deltaVR_PL)[1], HPDinterval(deltaVR_LD)[1], 
+              HPDinterval(deltaVR_Day)[1], HPDinterval(deltaVR_Night)[1]),
+   upper =  c(HPDinterval(VID_Day_LD)[2], HPDinterval(VID_Night_LD)[2],
+              HPDinterval(VID_Day_PL)[2], HPDinterval(VID_Night_PL)[2],
+              HPDinterval(deltaVR_PL)[2], HPDinterval(deltaVR_LD)[2],
+              HPDinterval(deltaVR_Day)[2], HPDinterval(deltaVR_Night)[2]),
+   Type = c("Repeatability", "Repeatability", "Repeatability", 
+            "Repeatability", "\u0394", "\u0394", "\u0394", "\u0394"), 
+   Color = c("#a37d0b", "#52514e","#f2b90f", "#d19f0a", "#eda909", 
+             "#7d786e", "#eda909", "#7d786e" ))
+
+
+
+plt3 <- ggplot(WID, aes(x = name, y = mean, ymin = upper, ymax = lower)) +
+   geom_linerange(aes(color =  name), size = 1, alpha = 0.5) +
+   geom_point(aes(color = name), position=position_dodge(width=c(0.6,0.4)), size = 3) +
+   coord_flip() + labs(y = "Posterior mean", x = "Treatment") +  
+   labs(colour= "Within-individual variation") +
+   geom_hline(yintercept = 0)  + 
+   theme_bw()
+
+plt3 +  scale_color_manual(values=c("orange", "orange","#172c3d", "orange", 
+                                  "orange", "#a88f0f", "#a88f0f", "orange" )) +
+   scale_fill_manual(values=c("orange", "orange","#172c3d", "orange",
+                              "orange", "#a88f0f", "#a88f0f", "orange")) +
+   theme(legend.position = "none") 
+
+```
+<br> _Fig S4._ Forest plot for within-individual variation between treatment groups within periods and ∆R of differences between treatments (∆R = PL-LD) and between the time on which the startle response was induced ∆R (Night-Day). Within-individual variation and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
+<br>
+```{r table WID}
+WID <- WID %>% 
+   mutate_at(c( "mean","lower", "upper"),as.numeric) %>% 
+   mutate_at(vars("mean","lower", "upper"), funs(round(., 3))) %>% 
+   select("name", "mean","lower", "upper")
+
+repeat_VID<- c("Repeatability estimate", paste0("\u0394", " Variance"))
+
+htmlTable(as.data.frame(WID[,-1]), 
+          header =   paste(c("Posterior mean","95% CI lower","95% CI upper")),
+          rnames = paste(c(Repeat$name)),
+          rgroup = c(repeat_VID),
+          n.rgroup = c(4, 4), 
+          #          col.rgroup = c(rows=c(AD1),"#c95400"),
+          #          col.rgroup = c(rows=c(AD2),"#c95400"),
+          caption="Table S10: Within-individual variation (VWI) and differences in VWI (∆V) in startle response duration between treatment groups within time",
+          tfoot= "Differences between treatments and time (∆V) was estimated as PL - LD and was Day - Night")
+
+```
+<br><br>
+
+# 3. The effect of permanent light on metabolic rate
+
+<br>
+To investigate the effect of light pollution on the behaviour of hermit crabs, we used a two-way repeated-measures ANOVA. Metabolic rate was log-transformed (log~10~ +1). To ensure that the period on which it was collected (A or B) did not affect the hermit crab metabolic rate, we first compare whether metabolic rate varied according to the experimental period.
+<br>
+
+```{r period comparison}
+MR=read.csv("data/MR1.csv", header=TRUE)
+id<-as.factor(MR$ID)
+period<-as.factor(MR$Period)
+Treat<-as.factor(MR$Treatment)
+time<-as.factor(MR$Time)
+metR<-as.numeric(MR$metabolic.rate)
+Period_AOV <- lmer(log10(metR+1) ~ period + (1|id), data=MR)
+Pr_result<- as.data.frame(anova(Period_AOV))
+
+Period_L <- c("Sum Sq  ","Mean Sq  ", "NumDF  " ,
+              "DenDF  "  , "F value  ", "p  ") 
+
+Pr_result = Pr_result %>% mutate_at(c( "Sum Sq","Mean Sq", "NumDF" ,
+                                        "DenDF", "F value", "Pr(>F)" ),as.numeric) %>%
+   mutate_at(vars( "Sum Sq","Mean Sq", "NumDF" ,"DenDF", "F value", "Pr(>F)"), 
+             funs(round(., 4)))
+
+htmlTable(as.data.frame(Pr_result), 
+          header =   paste(c(Period_L)),
+          caption="Table S11: Results of repeated measures ANOVA, testing whether metabolic rate varied according with the period on which it was collected (A or B)",
+          rnames = paste("Perid"))
+```
+
+<br>
+```{r results MR, warning=FALSE}
+MR_AOV <- lmer(log10(metR+1) ~ time*Treat + (1|id), data=MR)
+
+MR_result<- as.data.frame(anova(MR_AOV))
+
+MR__L <- c("Sum Sq  ","Mean Sq  ", "NumDF  " ,
+           "DenDF  "  , "F value  ", "p  ") 
+
+MR_result = MR_result %>% mutate_at(c( "Sum Sq","Mean Sq", "NumDF" ,"DenDF", 
+                                        "F value", "Pr(>F)" ),as.numeric) %>% 
+   mutate_at(vars( "Sum Sq","Mean Sq", "NumDF" ,"DenDF", "F value", "Pr(>F)"), funs(round(., 4)))
+
+htmlTable(as.data.frame(MR_result), 
+          header =   paste(c(Period_L)),
+          caption="Table S12: Results of repeated measures ANOVA, testing the effect of permanent light on metabolic rate",
+          rnames = paste(c("Time", "Treatment", "Treatment x Time")))
+```
+<br>
+```{r plot data mr, warning=FALSE, fig.height= 3, fig.width= 5}
+  MR %>% 
+   group_by(Treatment) %>% 
+   ggplot(aes(y =log10(metabolic.rate +1), x = Treatment, fill =Treatment)) +
+   geom_boxplot(size = 0.75, width = 0.25) + labs(x = "Treatment", y = "Metabolic rate") +
+   theme_classic() + coord_flip() +
+   scale_fill_manual(values=c("#172c3d", "orange")) + guides(fill=FALSE) +
+   scale_color_manual(values=c("#a37d0b", "#d1a615")) +
+   scale_x_discrete(labels = c("LD treatment", "PL Treatment")) 
+
+```
+<br> _Fig S5._ The effect of permanent light on the metabolic rate (MO2). Pagurus bernhardus. Metabolic rate is expressed as log~10~ nmol O~2~ mg^−1 h^−1 STP. 
+
+# Session info
+
+```{r sessioninfo, echo=F,  warning=FALSE}
+library(kableExtra)
+sessionInfo <- devtools::session_info() 
+sessionInfo$platform 
+sessionInfo$packages %>% kable("html") %>% kable_styling() %>% scroll_box(height = "400px") 
+```
