@@ -1,7 +1,7 @@
 ---
 title: "IIV in circadian rhythms"
 author: "Mari Velasque"
-date: "8/16/2019"
+date: "06 July 2021"
 output:
   html_document: 
     code_folding: "hide"
@@ -15,8 +15,17 @@ This document was written in R Markdown, and translated into html using the R pa
 
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(fig.path='figures/')
-knitr::opts_chunk$set(error = TRUE)
+knitr::opts_chunk$set(fig.path='figures/',
+                      cache=TRUE,
+                      echo=FALSE, 
+                      warning=FALSE, 
+                      message=FALSE,
+                      screenshot.force = TRUE)
+```
+
+```{r eval=TRUE, include=FALSE}
+#setwd("/Users/marianavelasque/Dropbox/Pesquisa/Doutorado\ 2/PhD\ Analysis/Experiment\ 2")
+load("/Users/marianavelasque/Dropbox/Pesquisa/Doutorado\ 2/PhD\ Analysis/Experiment\ 2/MCMC_results.RData")
 ```
 
 ```{r libraries, message = FALSE, warning=FALSE}
@@ -63,11 +72,12 @@ lightdark=read_csv("data/Experiment_2_data.csv", col_types = cols()) %>%
 #Add a second column merging time and treatment for posterior use
 lightdark = data.frame(lightdark %>% 
                           unite(time_treatment, c(srtime, treatment), 
-                                sep = "_", remove = FALSE)) 
+                                sep = "_", remove = FALSE)) %>% 
+   as_tibble()
 
 ```
 Closer inspection indicated that the treatment seems to have a significant effect on the startle reponse duration. The overdispersion of the measures (A), also suggests that Startle response duration should log~10~ transformed to improve normality (B).
-```{r raw data check, fig.width=8, fig.height=4}
+```{r raw data check, fig.width=8, fig.height=4, warning=FALSE}
 D1 <- lightdark %>% 
    group_by(treatment) %>% 
    ggplot(aes(x = as.factor(id), y = sr, color =treatment)) +
@@ -89,16 +99,14 @@ D2 <- lightdark %>%
 plot_grid(D1, D2,  labels = c('A', 'B'), label_size = 15)
 
 ```
-<br> <br> _Fig S1._ Plot of startle reponse duration, raw data (A) and log~10~ transformed (B) per individual.  
+<br> <br> _Figure S1._ Plot of startle reponse duration, raw data (A) and log~10~ transformed (B) per individual.  
 
 The effect of permanent light (a) and the interaction (b) between treatment and time (day or night) on the startle response duration of the hermit crab Pagurus bernhardus. We used hierarchical generalized linear models (HGLM) to predict the effect of permanent light and time on which the startle response was induced to predict its duration. 
-```{r, include=FALSE}
-load("MCMC_results.RData")
 
-```
 <br><br>
 
 # 1. The effect of permanent light on the startle response duration
+
 <br>
 
 ## Model selection: comparing priors
@@ -282,41 +290,44 @@ All models ran for 500,000 interactions, with a thinning interval of 100 and a b
 <br><br>
 
 The effect of permanent light on the startle response duration of hermit crabs
-```{r plot mean effect for sr, fig.width=8, fig.height=4}
+```{r plot mean effect for sr, fig.height=4, fig.width=8, message=FALSE, warning=FALSE}
 preds<- c(predict(M1.4, marginal = NULL, type = "response"))
 
 lightdark$prediction = preds
 
+
 g1<- lightdark %>% 
    group_by(treatment) %>% 
-   ggplot(aes(x =time_treatment, y = prediction, fill =time_treatment)) +
-   geom_boxplot(size = 0.75, width = 0.25) + labs(x = "Treatment", 
-                                                  y = "Startle response duration (predicted)") +
-   scale_fill_manual(values=c("orange", "orange", "#172c3d", "orange")) + 
-   guides(fill=FALSE) +
-   scale_x_discrete(labels = c("LD during day", "PL during day", 
-                               "LD during night", "PL during night")) + 
-   theme_classic() 
+   ggplot(aes(x =treatment, y = prediction, fill =srtime)) +
+   geom_boxplot(size = 0.8, width = 0.4) + 
+   labs(x = "Time", y = "Startle response duration (predicted)") +
+   scale_fill_manual(values=c("orange", "#3c6a8f"), labels = c("Day", "Night"), name = "Time") + 
+   #guides(fill=FALSE)  +
+   scale_x_discrete(labels = c("LD", "PL")) + 
+   theme_classic(base_size = 12) 
+
 
 g2<- lightdark %>% 
    group_by(treatment) %>% 
    ggplot(aes(x =treatment, y = prediction, fill =treatment)) +
    geom_boxplot(size = 0.75, width = 0.25) + labs(x = "Treatment", 
                                                   y = "Startle response duration (predicted)") +
-   scale_fill_manual(values=c("#172c3d", "orange")) + 
+   scale_fill_manual(values=c("orange", "#3c6a8f")) + 
    guides(fill=FALSE)  +
-   theme_classic() 
+    theme_classic(base_size = 12) 
 
 
-plot_grid(g2, g1,  labels = c('A', 'B'), label_size = 15)
+plot_grid(g2, g1,  rel_widths = c(1,2),
+          labels = c('A', 'B'), label_size = 15)
+
 ```
-<br> _Fig S2._ The effect of permanent light (a) and the interaction (b) between treatment and time (day or night) on the startle response duration of the hermit crab Pagurus bernhardus. We used the HGLM model to predict the startle response duration. 
+<br> _Figure S2._ The effect of permanent light (a) and the interaction (b) between treatment and time (day or night) on the startle response duration of the hermit crab Pagurus bernhardus. We used the HGLM model to predict the startle response duration. 
 
 <br>
 
 #### Summary of the results:
 
-```{r result table 1, warning=FALSE}
+```{r result table 1, message=FALSE, warning=FALSE}
 MME1 <- c("Intercept", "Time","Treatment", 
           "Occcasion", "Weight", "Haemocyanin concentration",
           "Treatment x Time") 
@@ -462,7 +473,7 @@ M2.5 <- MCMCglmm(log(sr+1)~ srtime + treatment + obs +
                , nitt=500000, thin=100, burnin=50000,verbose = F)  
 ```
 
-```{r checking results, results='asis', warning=FALSE}
+```{r checking results, results='asis', message=FALSE, warning=FALSE}
 MME <- c("Intercept", "Time","Treatment", "Occcasion", 
          "Weight", "Haemocyanin concentration","Period", 
          "Treatment x Time", "Treatment x Period") 
@@ -609,7 +620,7 @@ plt1 +  scale_color_manual(values=c("orange", "orange","#172c3d", "orange",
                               "orange", "#a88f0f", "#a88f0f", "orange")) +
    theme(legend.position = "none") 
 ```
-<br> _Fig S3._ Forest plot for the repeatability estimates between treatment groups within periods and ∆R of differences between treatments (∆R = PL-LD) and between the time on which the startle response was induced ∆R (Night-Day). Repeatability and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
+<br> _Figure S3._ Forest plot for the repeatability estimates between treatment groups within periods and ∆R of differences between treatments (∆R = PL-LD) and between the time on which the startle response was induced ∆R (Night-Day). Repeatability and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
 
 <br>
 ```{r table repeatability}
@@ -681,7 +692,7 @@ plt2 +  scale_color_manual(values=c("orange", "orange","#172c3d", "orange",
    theme(legend.position = "none") 
 
 ```
-<br> _Fig S4._ Forest plot for between-individual variation between treatment groups within periods and ∆R of differences between treatments (∆R = PL-LD) and between the time on which the startle response was induced ∆R (Night-Day). Between-individual variation and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
+<br> _Figure S4._ Forest plot for between-individual variation between treatment groups within periods and ∆R of differences between treatments (∆R = PL-LD) and between the time on which the startle response was induced ∆R (Night-Day). Between-individual variation and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
 <br>
 ```{r table VID}
 VID <- VID %>% 
@@ -753,7 +764,7 @@ plt3 +  scale_color_manual(values=c("orange", "orange","#172c3d", "orange",
    theme(legend.position = "none") 
 
 ```
-<br> _Fig S4._ Forest plot for within-individual variation between treatment groups within periods and ∆R of differences between treatments (∆R = PL-LD) and between the time on which the startle response was induced ∆R (Night-Day). Within-individual variation and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
+<br> _Figure S4._ Forest plot for within-individual variation between treatment groups within periods and ∆R of differences between treatments (∆R = PL-LD) and between the time on which the startle response was induced ∆R (Night-Day). Within-individual variation and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
 <br>
 ```{r table WID}
 WID <- WID %>% 
@@ -826,15 +837,47 @@ htmlTable(as.data.frame(MR_result),
 ```
 <br>
 ```{r plot data mr, warning=FALSE, fig.height= 3, fig.width= 5}
-  MR %>% 
+Mt<- MR %>% 
    group_by(Treatment) %>% 
    ggplot(aes(y =log10(metabolic.rate +1), x = Treatment, fill =Treatment)) +
-   geom_boxplot(size = 0.75, width = 0.25) + labs(x = "Treatment", y = "Metabolic rate") +
-   theme_classic() + coord_flip() +
-   scale_fill_manual(values=c("#172c3d", "orange")) + guides(fill=FALSE) +
-   scale_color_manual(values=c("#a37d0b", "#d1a615")) +
-   scale_x_discrete(labels = c("LD treatment", "PL Treatment")) 
+   geom_boxplot(size = 0.8, width = 0.4) + 
+   labs(x = "", y = "Metabolic rate") +
+   scale_fill_manual(values=c("#b5c1cf", "#b5c1cf"), 
+                     labels = c("Day", "Night"), 
+                     name = "") + 
+   #guides(fill=FALSE)  +
+   guides(fill = guide_legend(title = "Time")) +
+   theme_classic(base_size = 12) +
+   theme(legend.position="none",
+         text = element_text(size=15),
+         legend.key.size = unit(1, 'cm')) +
+   #coord_flip() +
+   scale_x_discrete(labels = c("PL", "LD")) 
 
+g1<- lightdark %>% 
+   group_by(treatment) %>% 
+   ggplot(aes(x =treatment, y = prediction, fill =srtime)) +
+   geom_boxplot(size = 0.8, width = 0.4) + 
+   labs(x = "", y = "Boldness") +
+   scale_fill_manual(values=c("orange", "#3c6a8f"),
+                     labels = c("Day", "Night"), name = "") + 
+   #guides(fill=FALSE)  +
+   #scale_x_discrete(labels = c("Standard light", "Permanent light")) + 
+   theme_classic(base_size = 12) + 
+   theme(legend.position="top",
+         text = element_text(size=15),
+         legend.key.size = unit(1, 'cm'))+
+   scale_x_discrete(labels = c("PL", "LD")) 
+
+ggarrange(g1, Mt, 
+          heights = c(1, 1),
+          widths = c(1.4,1),
+          align='h',
+          labels=c('A', 'B'),
+          common.legend = F)
+
+ggsave("g2.png",
+        units="in", width=6, height= 4, dpi=600)
 ```
 <br> _Fig S5._ The effect of permanent light on the metabolic rate (MO2). Pagurus bernhardus. Metabolic rate is expressed as log~10~ nmol O~2~ mg^−1 h^−1 STP. 
 
