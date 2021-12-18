@@ -19,7 +19,7 @@ This document was written in R Markdown, and translated into html using the R pa
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(fig.path='figures/',
                       cache=TRUE,
-                      echo=FALSE, 
+                      #echo=FALSE, 
                       warning=FALSE, 
                       message=FALSE,
                       screenshot.force = TRUE)
