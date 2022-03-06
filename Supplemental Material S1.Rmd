@@ -25,11 +25,6 @@ knitr::opts_chunk$set(fig.path='figures/',
                       screenshot.force = TRUE)
 ```
 
-```{r eval=TRUE, include=FALSE}
-#setwd("/Users/marianavelasque/Dropbox/Pesquisa/Doutorado\ 2/PhD\ Analysis/Experiment\ 2")
-load("/Users/marianavelasque/Dropbox/Pesquisa/Doutorado\ 2/PhD\ Analysis/Experiment\ 2/MCMC_results_exp.RData")
-```
-
 ```{r libraries, message = FALSE, warning=FALSE}
 # #Install missing packages and load all R libraries used in this analysis
 # 
@@ -46,7 +41,6 @@ library(MCMCglmm)
 library(gridExtra)
 library(psycho)
 library(lme4)
-library(kableExtra)
 library(ggsignif)
 library(brms)
 library(lattice)
@@ -64,7 +58,7 @@ library(ggplot2)
 
 ### First lets check take a look in raw data
 
-```{r dall data, eval=FALSE, warning=FALSE, include=TRUE}
+```{r dall data, eval = TRUE,  warning=FALSE, include=TRUE}
 lightdark=read_csv("data/light_pollution_resul.csv", 
                    col_types = cols()) %>% 
    mutate(id, factor(id), srtime= factor(srtime), treatment = factor(treatment))
@@ -88,7 +82,7 @@ D1 <- lightdark %>%
    theme_classic() + 
    theme(legend.position = "none") +
    scale_color_manual(values=c("#172c3d", "orange"),
-                      labels = c("Normal light", "ALAN")) 
+                      labels = c("standard light", "ALAN")) 
 
 D2 <- lightdark %>% 
    group_by(treatment) %>% 
@@ -97,7 +91,7 @@ D2 <- lightdark %>%
                                   y = "Startle response duration (log 10)") + 
    guides(fill=FALSE)  + theme_classic() + 
    scale_color_manual(values=c("#172c3d", "orange"),
-                      labels = c("Normal light", "ALAN"))  
+                      labels = c("standard light", "ALAN"))  
 
 plot_grid(D1, D2,  labels = c('A', 'B'), label_size = 15)
 
@@ -275,6 +269,7 @@ htmlTable(as.data.frame(Priors_COV[,-1]),
          tfoot="To detect proper convergence, autocorrelation diagnostics should be < 0.1")
 ```
 <br>
+
 ### Model selection: comparing Deviance Information Criterion (DIC)
 
 ```{r comparing models fixed effects}
@@ -293,12 +288,13 @@ All models ran for 500,000 interactions, with a thinning interval of 100 and a b
 <br><br>
 
 The effect of ALAN on the startle response duration of hermit crabs
-```{r plot mean effect for sr, fig.height=4, fig.width=8, message=FALSE, warning=FALSE}
+```{r plot mean effect for sr, eval = TRUE,  fig.height=4, fig.width=8, message=FALSE, warning=FALSE, include=TRUE}
 
 preds<- c(predict(M1.4, marginal = NULL, type = "response"))
-
 lightdark$prediction = preds
+```
 
+```{r plot1_2}
 
 g1<- lightdark %>% 
    group_by(treatment) %>% 
@@ -307,7 +303,7 @@ g1<- lightdark %>%
    labs(x = "Time", y = "Startle response duration (predicted)") +
    scale_fill_manual(values=c("orange", "#3c6a8f"), labels = c("Day", "Night"), name = "Time") + 
    #guides(fill=FALSE)  +
-   scale_x_discrete(labels = c("Normal light", "ALAN")) + 
+   scale_x_discrete(labels = c("standard light", "ALAN")) + 
    theme_classic(base_size = 12) 
 
 
@@ -317,7 +313,7 @@ g2<- lightdark %>%
    geom_boxplot(size = 0.75, width = 0.25) + labs(x = "Treatment", 
                                                   y = "Startle response duration (predicted)") +
    scale_fill_manual(values=c("#3c6a8f", "orange")) + 
-   scale_x_discrete(labels = c("Normal light", "ALAN")) + 
+   scale_x_discrete(labels = c("standard light", "ALAN")) + 
    guides(fill=FALSE)  +
     theme_classic(base_size = 12) 
 
@@ -325,7 +321,12 @@ g2<- lightdark %>%
 plot_grid(g2, g1,  rel_widths = c(1,2),
           labels = c('A', 'B'), label_size = 15)
 
+
+ggsave("g1.png",
+        units="in", width=12, height= 9, dpi=600)
 ```
+<br>
+
 <br> _Figure S2._ The effect of ALAN (a) and the interaction (b) between treatment and time (day or night) on the startle response duration of the hermit crab *Pagurus bernhardus*. We used the HGLM model to predict the startle response duration. 
 
 <br>
@@ -376,7 +377,7 @@ htmlTable(as.data.frame(Random_effects),
 ## Model selection: comparing priors
 <br>
 We first need to specify priors for random effects. Because our main focus is to determine the between and within-individual variation in startle response, determining the Repeat of our (co)variance matrix is extremely important. For the fixed effects, we use a multivariate normal distribution with a zero mean vector and a diagonal matrix with large variances (MCMCglmm default setting). For our G-Repeat and R-Repeat, we specified priors with a (co)variances matrix assumed to have an inverse-Wishart prior distribution and individual elements for each element of the variance component (e.g. period). In all models, we used a variance Repeat with diagonal matrices (implying a priori independence between each startle response measurement and the period on which the data was collected). In the model, startle response duration (sr) was log-transformed (log~10~), ensuring that the total variance was evenly split across each observation. 
-We specified four different models with varying levels of inverse-Wishart with scale and with varying degree of belief (_nu_). This is important, as inverse-Wishart priors can be problematic as it specifies a conjugate prior, which specify an _a priori_dependence between correlations and variances, impacting the estimation of the covariance matrix. Thus, we used several types of prior with differing properties, in order to evaluate the sensitivity of our conclusions according to the prior specifications. We evaluated our posterior distribution and the general model fir under the following primers:
+We specified four different models with varying levels of inverse-Wishart with scale and with varying degree of belief (_nu_). This is important, as inverse-Wishart priors can be problematic as it specifies a conjugate prior, which specify an _a priori_ dependence between correlations and variances, impacting the estimation of the covariance matrix. Thus, we used several types of prior with differing properties, in order to evaluate the sensitivity of our conclusions according to the prior specifications. We evaluated our posterior distribution and the general model fir under the following primers:
 <br>
 <style>
 div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
@@ -407,8 +408,8 @@ prior2.5<- list(R=list(V=diag(4), nu=1.002),
                 G=list(G1=list(V=diag(4), nu=1.002)))
 
 
-IIV_matrix<-matrix(c("VID_Day_normal light",0,0,0,
-                     0,"VID_Night_normal light",0,0,
+IIV_matrix<-matrix(c("VID_Day_standard light",0,0,0,
+                     0,"VID_Night_standard light",0,0,
                      0,0,"VID_Day_ALAN",0,
                      0,0,0,"VID_Night_ALAN"),
                    nrow=4,ncol=4,byrow=T)
@@ -553,7 +554,7 @@ All models ran for 500,000 interactions, with a thinning interval of 100 and a b
 
 ## Comparing repeatability across treatment groups and time on which startle response duration was measured
 
-We began by estimating the posterior modes for the repeatabilities across experimental blocks (i.e. ALAN during day and night, normal light regime during day and night). 
+We began by estimating the posterior modes for the repeatabilities across experimental blocks (i.e. ALAN during day and night, standard light regime during day and night). 
 
 ```{r repeatability behaviour, warning=F, fig.width=6, fig.height=4}
 
@@ -587,10 +588,10 @@ deltaR_Day = (R_Day_PL - R_Day_LD)
 deltaR_Night = (R_Night_PL - R_Night_LD)
 
 
-deltas<-  paste0("\u0394", c(" ALAN", " normal light", " Day", " Night"))
+deltas<-  paste0("\u0394", c(" ALAN", " standard light", " Day", " Night"))
 
 Repeat<-data_frame(
-   name = c("Day - normal light", "Night - normal light", "Day - ALAN", "Night - ALAN",deltas),
+   name = c("Day - standard light", "Night - standard light", "Day - ALAN", "Night - ALAN",deltas),
    mean =  c(posterior.mode(R_Day_LD), posterior.mode(R_Night_LD),
              posterior.mode(R_Day_PL), posterior.mode(R_Night_PL), 
              posterior.mode(deltaR_PL), posterior.mode(deltaR_LD),
@@ -625,7 +626,7 @@ plt1 +  scale_color_manual(values=c("orange", "orange","#172c3d", "orange",
                               "orange", "#a88f0f", "#a88f0f", "orange")) +
    theme(legend.position = "none") 
 ```
-<br> _Figure S3._ Forest plot for the repeatability estimates between treatment groups within periods and ∆R of differences between treatments (∆R = ALAN - normal light) and between the time on which the startle response was induced ∆R (Night-Day). Repeatability and difference in repeatability (∆) values were considered significant when 95% CIs of their posterior modes did not overlap zero.
+<br> _Figure S3._ Forest plot for the repeatability estimates between treatment groups within periods and ∆R of differences between treatments (∆R = ALAN - standard light) and between the time on which the startle response was induced ∆R (Night-Day). Repeatability and difference in repeatability (∆) values were considered significant when 95% CIs of their posterior modes did not overlap zero.
 
 <br>
 ```{r table repeatability}
@@ -643,7 +644,7 @@ htmlTable(as.data.frame(Repeat[,-1]),
           #          col.rgroup = c(rows=c(AD1),"#c95400"),
           #          col.rgroup = c(rows=c(AD2),"#c95400"),
           caption="Table S8: Repeatability estimates and differences in repeatability (∆R) in startle response duration between treatment groups within time",
-          tfoot= "Differences between treatments and time (∆R) was estimated as ALAN - normal light and was Day - Night")
+          tfoot= "Differences between treatments and time (∆R) was estimated as ALAN - standard light and was Day - Night")
 ```
 
 <br><br>
@@ -662,7 +663,7 @@ deltaVID_Day = VID_Day_PL - VID_Day_LD
 deltaVID_Night = VID_Night_PL - VID_Night_LD       
 
 VID<-data_frame(
-   name = c("Day - normal light", "Night - normal light", "Day - ALAN", "Night - ALAN",deltas),
+   name = c("Day - standard light", "Night - standard light", "Day - ALAN", "Night - ALAN",deltas),
    mean =  c(posterior.mode(VID_Day_LD), posterior.mode(VID_Night_LD),
              posterior.mode(VID_Day_PL), posterior.mode(VID_Night_PL),
              posterior.mode(deltaVID_PL), posterior.mode(deltaVID_LD),
@@ -697,7 +698,7 @@ plt2 +  scale_color_manual(values=c("orange", "orange","#172c3d", "orange",
    theme(legend.position = "none") 
 
 ```
-<br> _Figure S4._ Forest plot for between-individual variation between treatment groups within periods and ∆R of differences between treatments (∆R = ALAN - normal light) and between the time on which the startle response was induced ∆R (Night-Day). Between-individual variation and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
+<br> _Figure S4._ Forest plot for between-individual variation between treatment groups within periods and ∆R of differences between treatments (∆R = ALAN - standard light) and between the time on which the startle response was induced ∆R (Night-Day). Between-individual variation and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
 <br>
 ```{r table VID}
 VID <- VID %>% 
@@ -715,7 +716,7 @@ htmlTable(as.data.frame(VID[,-1]),
           #          col.rgroup = c(rows=c(AD1),"#c95400"),
           #          col.rgroup = c(rows=c(AD2),"#c95400"),
           caption="Table S9:Between-individual variation (VBI) and differences in VBI (∆V) in startle response duration between treatment groups within time",
-          tfoot= "Differences between treatments and time (∆V) was estimated as ALAN - Normal light and was Day - Night")
+          tfoot= "Differences between treatments and time (∆V) was estimated as ALAN - standard light and was Day - Night")
 
 ```
 <br><br>
@@ -723,7 +724,7 @@ htmlTable(as.data.frame(VID[,-1]),
 ## Comparing within-individual variation across treatment groups and time on which startle response duration was measured
 
 <br>
-```{r WID, fig.width=6, fig.height=4, warning=FALSE}
+```{r WID, eval = TRUE,   warning=FALSE, include=TRUE}
 # Within-individual variation during PL treatment morning versus night  
 deltaVR_PL = VR_Day_PL - VR_Night_PL 
 # Within-individual variation during LD treatment morning versus night   
@@ -734,7 +735,7 @@ deltaVR_Day = VID_Day_PL - VID_Day_LD
 deltaVR_Night = VR_Night_PL - VR_Night_LD       
 
 WID<-data_frame(
-   name = c("Day - normal light", "Night - normal light", "Day - ALAN", "Night - ALAN",deltas),
+   name = c("Day - standard light", "Night - standard light", "Day - ALAN", "Night - ALAN",deltas),
    mean =  c(posterior.mode(VID_Day_LD), posterior.mode(VID_Night_LD),
              posterior.mode(VID_Day_PL), posterior.mode(VID_Night_PL),
              posterior.mode(deltaVR_PL), posterior.mode(deltaVR_LD), 
@@ -752,8 +753,9 @@ WID<-data_frame(
    Color = c("#a37d0b", "#52514e","#f2b90f", "#d19f0a", "#eda909", 
              "#7d786e", "#eda909", "#7d786e" ))
 
+```
 
-
+```{r plotvdi, fig.height=4, fig.width=6,}
 plt3 <- ggplot(WID, aes(x = name, y = mean, ymin = upper, ymax = lower)) +
    geom_linerange(aes(color =  name), size = 1, alpha = 0.5) +
    geom_point(aes(color = name), position=position_dodge(width=c(0.6,0.4)), size = 3) +
@@ -769,7 +771,7 @@ plt3 +  scale_color_manual(values=c("orange", "orange","#172c3d", "orange",
    theme(legend.position = "none") 
 
 ```
-<br> _Figure S4._ Forest plot for within-individual variation between treatment groups within periods and ∆R of differences between treatments (∆R = ALAN - normal light) and between the time on which the startle response was induced ∆R (Night-Day). Within-individual variation and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
+<br> _Figure S4._ Forest plot for within-individual variation between treatment groups within periods and ∆R of differences between treatments (∆R = ALAN - standard light) and between the time on which the startle response was induced ∆R (Night-Day). Within-individual variation and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
 <br>
 ```{r table WID}
 WID <- WID %>% 
@@ -787,7 +789,7 @@ htmlTable(as.data.frame(WID[,-1]),
           #          col.rgroup = c(rows=c(AD1),"#c95400"),
           #          col.rgroup = c(rows=c(AD2),"#c95400"),
           caption="Table S10: Within-individual variation (VWI) and differences in VWI (∆V) in startle response duration between treatment groups within time",
-          tfoot= "Differences between treatments and time (∆V) was estimated as ALAN - normal light and was Day - Night")
+          tfoot= "Differences between treatments and time (∆V) was estimated as ALAN - standard light and was Day - Night")
 
 ```
 <br><br>
@@ -842,7 +844,7 @@ htmlTable(as.data.frame(MR_result),
 ```
 <br>
 <br>
-```{r results MR, eval=FALSE, warning=FALSE, include=TRUE}
+```{r results MR, eval = TRUE,  warning=FALSE, include=TRUE}
 MR_AOV <- lmer(log10(metR+1) ~ time*Treat + (1|id), data=MR)
 
 MR_result<- as.data.frame(anova(MR_AOV))
@@ -864,7 +866,7 @@ htmlTable(as.data.frame(MR_result),
 <br>
 <br><br>
 
-```{r plot_data_mr, eval=TRUE,  include=TRUE}
+```{r plot_data_mr, eval = TRUE,  include=TRUE}
 Mt<- MR %>% 
    group_by(Treatment) %>% 
    ggplot(aes(y =log10(metabolic.rate +1), x = Treatment, fill =Treatment)) +
@@ -882,7 +884,7 @@ Mt<- MR %>%
          text = element_text(size=15),
          legend.key.size = unit(1, 'cm')) +
    #coord_flip() +
-   scale_x_discrete(labels = c("Normal light", "ALAN")) 
+   scale_x_discrete(labels = c("standard light", "ALAN")) 
 
 g1<- lightdark %>% 
    group_by(treatment) %>% 
@@ -897,7 +899,7 @@ g1<- lightdark %>%
    theme(legend.position="top",
          text = element_text(size=15),
          legend.key.size = unit(1, 'cm'))+
-   scale_x_discrete(labels = c("Normal light", "ALAN")) 
+   scale_x_discrete(labels = c("standard light", "ALAN")) 
 
 
 haec <- lightdark %>% 
@@ -918,7 +920,7 @@ haec <- lightdark %>%
          text = element_text(size=15),
          legend.key.size = unit(1, 'cm')) +
    #coord_flip() +
-   scale_x_discrete(labels = c("Normal light", "ALAN")) 
+   scale_x_discrete(labels = c("standard light", "ALAN")) 
 
 
 ggarrange(g1, Mt, haec,
@@ -932,10 +934,6 @@ ggarrange(g1, Mt, haec,
 ggsave("g2.png",
         units="in", width=12, height= 9, dpi=600)
 ```
-<br>
-
-<img width="70%" src="/Users/marianavelasque/Dropbox/Pesquisa/Post-doc/Downling_lab/211010_trojan_females/Supplemental_material/Figures/gsea_plot_mit_edgeR.png"/>
-<br>
 
 _Fig S5._ The effect of ALAN on (A) boldness,  the (B) metabolic rate (MO2) and (C) haemocyanin concentration (mMol 1<sup>-1</sup>) in *Pagurus bernhardus*. Metabolic rate is expressed as log<sup>10</sup> nmol O<sub>2</sub> mg<sup>−1</sup> h<sup>−1 STP</sup> 
 
