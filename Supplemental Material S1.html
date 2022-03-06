@@ -288,7 +288,10 @@ pre code {
 </ul></li>
 <li><a href="#comparing-the-repeatability-and-variance-components-of-startle-responses">2. Comparing the repeatability and variance components of startle responses</a>
 <ul>
-<li><a href="#model-selection-comparing-priors-1">Model selection: comparing priors</a></li>
+<li><a href="#model-selection-comparing-priors-1">Model selection: comparing priors</a>
+<ul>
+<li><a href="#model-selection-comparing-deviance-information-criterion-dic-1">Model selection: comparing Deviance Information Criterion (DIC)</a></li>
+</ul></li>
 <li><a href="#comparing-repeatability-across-treatment-groups-and-time-on-which-startle-response-duration-was-measured">Comparing repeatability across treatment groups and time on which startle response duration was measured</a></li>
 <li><a href="#comparing-between-individual-variation-across-treatment-groups-and-time-on-which-startle-response-duration-was-measured">Comparing between-individual variation across treatment groups and time on which startle response duration was measured</a></li>
 <li><a href="#comparing-within-individual-variation-across-treatment-groups-and-time-on-which-startle-response-duration-was-measured">Comparing within-individual variation across treatment groups and time on which startle response duration was measured</a></li>
@@ -1115,7 +1118,8 @@ Prior 4
 </tr>
 </tbody>
 </table>
-<p><br> All models ran for 500,000 interactions, with a thinning interval of 100 and a burn-in of 50000. This resulted in ~4500 samples for which the autocorrelation between samples was was less than 0.01 using prior 4. We also shown the Deviance Information Criterion (DIC). Only <em>prior 4</em> had proper convergency of fixed and random effects, and thus, was used in this analysis. <br><br></p>
+<p><br></p>
+<p>All models ran for 500,000 interactions, with a thinning interval of 100 and a burn-in of 50000. This resulted in ~4500 samples for which the autocorrelation between samples was was less than 0.01 using prior 4. We also shown the Deviance Information Criterion (DIC). Only <em>prior 4</em> had proper convergency of fixed and random effects, and thus, was used in this analysis. <br><br></p>
 <p>The effect of ALAN on the startle response duration of hermit crabs</p>
 <div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>preds<span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fu">predict</span>(M1<span class="fl">.4</span>, <span class="at">marginal =</span> <span class="cn">NULL</span>, <span class="at">type =</span> <span class="st">&quot;response&quot;</span>))</span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>lightdark<span class="sc">$</span>prediction <span class="ot">=</span> preds</span></code></pre></div>
@@ -2527,7 +2531,9 @@ To detect proper convergence, autocorrelation diagnostics should be &lt; 0.1
 </tr>
 </tfoot>
 </table>
-<p><br> ### Model selection: comparing Deviance Information Criterion (DIC)</p>
+<p><br></p>
+<div id="model-selection-comparing-deviance-information-criterion-dic-1" class="section level3">
+<h3>Model selection: comparing Deviance Information Criterion (DIC)</h3>
 <div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>Value<span class="ot">&lt;-</span> <span class="fu">c</span>(M2<span class="fl">.1</span><span class="sc">$</span>DIC,  M2<span class="fl">.2</span><span class="sc">$</span>DIC,  M2<span class="fl">.3</span><span class="sc">$</span>DIC,  M2<span class="fl">.4</span><span class="sc">$</span>DIC,  M2<span class="fl">.5</span><span class="sc">$</span>DIC)</span>
 <span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>Prior<span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;Prior 1&quot;</span>, <span class="st">&quot;Prior 2&quot;</span>, <span class="st">&quot;Prior 3&quot;</span>, <span class="st">&quot;Prior 4&quot;</span>, <span class="st">&quot;Prior 5&quot;</span>)</span>
@@ -2598,6 +2604,7 @@ Prior 5
 </table>
 <p><br></p>
 <p>All models ran for 500,000 interactions, with a thinning interval of 100 and a burn-in of 50000. This resulted in ~4500 samples for which the autocorrelation between samples was less than 0.01. Thus, we chose the model with the lowest Deviance Information Criterion (DIC). All analysis gave very similar results, but we used the <em>prior 2</em> in the subsequential analysis. <br><br></p>
+</div>
 </div>
 <div id="comparing-repeatability-across-treatment-groups-and-time-on-which-startle-response-duration-was-measured" class="section level2">
 <h2>Comparing repeatability across treatment groups and time on which startle response duration was measured</h2>

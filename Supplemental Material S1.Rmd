@@ -270,7 +270,9 @@ htmlTable(as.data.frame(Priors_COV[,-1]),
 ```
 <br>
 
+
 ### Model selection: comparing Deviance Information Criterion (DIC)
+
 
 ```{r comparing models fixed effects}
 Value<- c(M1.1$DIC,  M1.2$DIC,  M1.3$DIC,  M1.4$DIC)
