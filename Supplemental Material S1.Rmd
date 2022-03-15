@@ -34,7 +34,7 @@ knitr::opts_chunk$set(fig.path='figures/',
 #                "tidybayes", "latticeExtra", "htmlTable", "magrittr", "DataCombine", 
 #                "ggplot2", "kableExtra")
 ##All done! 
-
+library("mlmRev")
 library(tidyverse)
 library(ggpubr)
 library(MCMCglmm)
@@ -42,10 +42,12 @@ library(gridExtra)
 library(psycho)
 library(lme4)
 library(ggsignif)
+library(broom)
 library(brms)
 library(lattice)
 library(lmerTest)
 library(cowplot)
+library(nlme)
 library(tidybayes)
 library(latticeExtra)
 library(kableExtra)
@@ -54,46 +56,48 @@ library(magrittr)
 library(DataCombine)
 library(htmlTable)
 library(ggplot2)
+options(scipen=999)
 ```
 
 ### First lets check take a look in raw data
 
-```{r dall data, eval = TRUE,  warning=FALSE, include=TRUE}
-lightdark=read_csv("data/light_pollution_resul.csv", 
-                   col_types = cols()) %>% 
-   mutate(id, factor(id), srtime= factor(srtime), treatment = factor(treatment))
-
-#Add a second column merging time and treatment for posterior use
-lightdark = data.frame(lightdark %>% 
-                          unite(time_treatment, c(srtime, treatment), 
-                                sep = "_", remove = FALSE)) %>% 
-   as_tibble()
+```{r dall data, eval=TRUE, warning=FALSE, include=TRUE}
+lightdark=read_csv("data/light_pollution_val_table.csv", 
+                     col_types = cols()) %>% 
+  mutate(id, factor(id), srtime= factor(srtime), treatment = factor(treatment), 
+         time_treatment = paste0(srtime, "_", treatment)) %>% 
+  as_tibble() 
 
 ```
 Closer inspection indicated that the treatment seems to have a significant effect on the startle reponse duration. The overdispersion of the measures (A), also suggests that Startle response duration should log~10~ transformed to improve normality (B).
-```{r raw data check, fig.width=8, fig.height=4, warning=FALSE}
+```{r raw data check, fig.width=8, fig.height=8, warning=FALSE}
 
 D1 <- lightdark %>% 
    group_by(treatment) %>% 
    ggplot(aes(x = as.factor(id), y = sr, color =treatment)) +
    geom_point(alpha = 0.7) + labs(x = "Individual ID", 
                                   y = "Startle response duration") + 
-   guides(fill=FALSE) + 
+   guides(col = guide_legend("Treatment")) + 
    theme_classic() + 
    theme(legend.position = "none") +
    scale_color_manual(values=c("#172c3d", "orange"),
-                      labels = c("standard light", "ALAN")) 
+                      labels = c("Standard light", "ALAN")) 
 
 D2 <- lightdark %>% 
    group_by(treatment) %>% 
    ggplot(aes(x = as.factor(id), y = log10(sr+ 1), color =treatment)) +
    geom_point(alpha = 0.7) + labs(x = "Individual ID", 
                                   y = "Startle response duration (log 10)") + 
-   guides(fill=FALSE)  + theme_classic() + 
+   guides(col = guide_legend("Treatment")) + 
+  theme_classic() + 
    scale_color_manual(values=c("#172c3d", "orange"),
-                      labels = c("standard light", "ALAN"))  
+                      labels = c("Standard light", "ALAN"))   +
+  labs(color = "Treatment")
 
-plot_grid(D1, D2,  labels = c('A', 'B'), label_size = 15)
+ggarrange(D1, D2,  labels = c('A', 'B'), 
+          common.legend = TRUE,
+          #legend = "bottom",
+          label_size = 15)
 
 ```
 <br> <br> _Figure S1._ Plot of startle response duration, raw data (A) and log~10~ transformed (B) per individual.  
@@ -123,7 +127,7 @@ div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
   </div>
 <br>
 
-```{r mean effect model, eval=FALSE}
+```{r mean effect model, eval=TRUE}
 ##adding differnt priors to test the best model fit
 
 prior1.1<-list(R = list(V = diag(1), nu = 1.002), 
@@ -185,7 +189,7 @@ M1.4 <- MCMCglmm(log(sr+1) ~ srtime + treatment +  obs +
 
 #### MCMCglmm prior comparison for fixed effects
 
-```{r results priors, results='asis', eval=FALSE}
+```{r results priors, results='asis', eval=TRUE}
 MME <- c("Intercept", "Time","Treatment", "Occcasion", 
          "Weight", "Haemocyanin concentration", "Treatment x Time") 
 RI = c("Hermit Crab ID", "Period", "Occcasion")
@@ -270,9 +274,7 @@ htmlTable(as.data.frame(Priors_COV[,-1]),
 ```
 <br>
 
-
 ### Model selection: comparing Deviance Information Criterion (DIC)
-
 
 ```{r comparing models fixed effects}
 Value<- c(M1.1$DIC,  M1.2$DIC,  M1.3$DIC,  M1.4$DIC)
@@ -286,11 +288,12 @@ htmlTable(Results,
        caption="Table S3: Comparion of DIC output between four different priors")
 ```
 <br>
+
 All models ran for 500,000 interactions, with a thinning interval of 100 and a burn-in of 50000. This resulted in ~4500 samples for which the autocorrelation between samples was was less than 0.01 using prior 4. We also shown the Deviance Information Criterion (DIC). Only *prior 4* had proper convergency of fixed and random effects, and thus, was used in this analysis.
 <br><br>
 
 The effect of ALAN on the startle response duration of hermit crabs
-```{r plot mean effect for sr, eval = TRUE,  fig.height=4, fig.width=8, message=FALSE, warning=FALSE, include=TRUE}
+```{r plot mean effect for sr, eval=TRUE, fig.height=4, fig.width=8, message=FALSE, warning=FALSE, include=TRUE}
 
 preds<- c(predict(M1.4, marginal = NULL, type = "response"))
 lightdark$prediction = preds
@@ -305,7 +308,7 @@ g1<- lightdark %>%
    labs(x = "Time", y = "Startle response duration (predicted)") +
    scale_fill_manual(values=c("orange", "#3c6a8f"), labels = c("Day", "Night"), name = "Time") + 
    #guides(fill=FALSE)  +
-   scale_x_discrete(labels = c("standard light", "ALAN")) + 
+   scale_x_discrete(labels = c("Standard light", "ALAN")) + 
    theme_classic(base_size = 12) 
 
 
@@ -315,8 +318,8 @@ g2<- lightdark %>%
    geom_boxplot(size = 0.75, width = 0.25) + labs(x = "Treatment", 
                                                   y = "Startle response duration (predicted)") +
    scale_fill_manual(values=c("#3c6a8f", "orange")) + 
-   scale_x_discrete(labels = c("standard light", "ALAN")) + 
-   guides(fill=FALSE)  +
+   scale_x_discrete(labels = c("Standard light", "ALAN")) + 
+   guides(fill="none") +
     theme_classic(base_size = 12) 
 
 
@@ -325,7 +328,7 @@ plot_grid(g2, g1,  rel_widths = c(1,2),
 
 
 ggsave("g1.png",
-        units="in", width=12, height= 9, dpi=600)
+        units="in", width=8, height= 4, dpi=600)
 ```
 <br>
 
@@ -393,7 +396,7 @@ div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
 </div>
 <br>
 
-```{r IIV model, warning = FALSE, eval=FALSE}
+```{r IIV model, warning = FALSE, eval=TRUE}
 prior2.1<- list(R=list(V=diag(4)/3.002, nu= 3.002),
                 G=list(G1=list(V=diag(4)/3.002, nu= 3.002)))
 
@@ -410,8 +413,8 @@ prior2.5<- list(R=list(V=diag(4), nu=1.002),
                 G=list(G1=list(V=diag(4), nu=1.002)))
 
 
-IIV_matrix<-matrix(c("VID_Day_standard light",0,0,0,
-                     0,"VID_Night_standard light",0,0,
+IIV_matrix<-matrix(c("VID_Day_LD",0,0,0,
+                     0,"VID_Night_LD",0,0,
                      0,0,"VID_Day_ALAN",0,
                      0,0,0,"VID_Night_ALAN"),
                    nrow=4,ncol=4,byrow=T)
@@ -534,6 +537,7 @@ htmlTable(as.data.frame(Priors[,-1]),
           tfoot="To detect proper convergence, autocorrelation diagnostics should be < 0.1")
 ```
 <br>
+
 ### Model selection: comparing Deviance Information Criterion (DIC)
 
 ```{r comparing models IIV}
@@ -590,10 +594,10 @@ deltaR_Day = (R_Day_PL - R_Day_LD)
 deltaR_Night = (R_Night_PL - R_Night_LD)
 
 
-deltas<-  paste0("\u0394", c(" ALAN", " standard light", " Day", " Night"))
+deltas<-  paste0("\u0394", c(" ALAN", " Standard light", " Day", " Night"))
 
-Repeat<-data_frame(
-   name = c("Day - standard light", "Night - standard light", "Day - ALAN", "Night - ALAN",deltas),
+Repeat<-tibble(
+   name = c("Day - Standard light", "Night - Standard light", "Day - ALAN", "Night - ALAN",deltas),
    mean =  c(posterior.mode(R_Day_LD), posterior.mode(R_Night_LD),
              posterior.mode(R_Day_PL), posterior.mode(R_Night_PL), 
              posterior.mode(deltaR_PL), posterior.mode(deltaR_LD),
@@ -609,8 +613,15 @@ Repeat<-data_frame(
    Type = c("Repeatability", "Repeatability", "Repeatability", "Repeatability", "\u0394", "\u0394", "\u0394", "\u0394"))
 
 
+Repeat1 <-  Repeat %>% 
+  mutate(name = str_replace(name, "LD", "- Standard light"),
+         name = str_replace(name, "PL", "- ALAN"),
+         name = str_replace(name, "Δ ", "Δ - "),
+         name = str_replace(name, "AM", "- AM"),
+         name = str_replace(name, "PM", "- PM"))
 
-plt1 <- ggplot(Repeat, aes(x = name, y = mean, ymin = upper, ymax = lower)) +
+
+plt1 <- ggplot(Repeat1, aes(x = name, y = mean, ymin = upper, ymax = lower)) +
    geom_linerange(aes(color =  name), size = 1, alpha = 0.5) +
    geom_point(aes(color = name), 
               position=position_dodge(width=c(0.6,0.4)), size = 3) +
@@ -628,25 +639,25 @@ plt1 +  scale_color_manual(values=c("orange", "orange","#172c3d", "orange",
                               "orange", "#a88f0f", "#a88f0f", "orange")) +
    theme(legend.position = "none") 
 ```
-<br> _Figure S3._ Forest plot for the repeatability estimates between treatment groups within periods and ∆R of differences between treatments (∆R = ALAN - standard light) and between the time on which the startle response was induced ∆R (Night-Day). Repeatability and difference in repeatability (∆) values were considered significant when 95% CIs of their posterior modes did not overlap zero.
+<br> _Figure S3._ Forest plot for the repeatability estimates between treatment groups within periods and ∆R of differences between treatments (∆R = ALAN - Standard light) and between the time on which the startle response was induced ∆R (Night-Day). Repeatability and difference in repeatability (∆) values were considered significant when 95% CIs of their posterior modes did not overlap zero.
 
 <br>
 ```{r table repeatability}
-Repeat <- Repeat %>% 
+Repeat1 <- Repeat1 %>% 
    mutate_at(c( "mean","lower", "upper"),as.numeric) %>% 
    mutate_at(vars("mean","lower", "upper"), funs(round(., 3))) %>%
    select("name", "mean","lower", "upper")
 
 repeat_L<- c("Repeatability estimate", paste0("\u0394", " Repeatability"))
-htmlTable(as.data.frame(Repeat[,-1]), 
+htmlTable(as.data.frame(Repeat1[,-1]), 
           header =   paste(c("Posterior mean","95% CI lower","95% CI upper")),
-          rnames = paste(c(Repeat$name)),
+          rnames = paste(c(Repeat1$name)),
           rgroup = c(repeat_L),
           n.rgroup = c(4, 4), 
           #          col.rgroup = c(rows=c(AD1),"#c95400"),
           #          col.rgroup = c(rows=c(AD2),"#c95400"),
           caption="Table S8: Repeatability estimates and differences in repeatability (∆R) in startle response duration between treatment groups within time",
-          tfoot= "Differences between treatments and time (∆R) was estimated as ALAN - standard light and was Day - Night")
+          tfoot= "Differences between treatments and time (∆R) was estimated as ALAN - Standard light and was Day - Night")
 ```
 
 <br><br>
@@ -665,7 +676,7 @@ deltaVID_Day = VID_Day_PL - VID_Day_LD
 deltaVID_Night = VID_Night_PL - VID_Night_LD       
 
 VID<-data_frame(
-   name = c("Day - standard light", "Night - standard light", "Day - ALAN", "Night - ALAN",deltas),
+   name = c("Day - Standard light", "Night - Standard light", "Day - ALAN", "Night - ALAN",deltas),
    mean =  c(posterior.mode(VID_Day_LD), posterior.mode(VID_Night_LD),
              posterior.mode(VID_Day_PL), posterior.mode(VID_Night_PL),
              posterior.mode(deltaVID_PL), posterior.mode(deltaVID_LD),
@@ -681,7 +692,15 @@ VID<-data_frame(
    Type = c("Repeatability", "Repeatability", "Repeatability", 
             "Repeatability", "\u0394", "\u0394", "\u0394", "\u0394"))
 
-plt2 <- ggplot(VID, aes(x = name, y = mean, ymin = upper, ymax = lower)) +
+VID1 <-  VID %>% 
+  mutate(name = str_replace(name, "LD", "- Standard light"),
+         name = str_replace(name, "PL", "- ALAN"),
+         name = str_replace(name, "AM", "- AM"),
+         name = str_replace(name, "Δ ", "Δ - "),
+         name = str_replace(name, "PM", "- PM"))
+
+
+plt2 <- ggplot(VID1, aes(x = name, y = mean, ymin = upper, ymax = lower)) +
    geom_linerange(aes(color =  name), size = 1, alpha = 0.5) +
    geom_point(aes(color = name), 
               position=position_dodge(width=c(0.6,0.4)), size = 3) +
@@ -700,25 +719,25 @@ plt2 +  scale_color_manual(values=c("orange", "orange","#172c3d", "orange",
    theme(legend.position = "none") 
 
 ```
-<br> _Figure S4._ Forest plot for between-individual variation between treatment groups within periods and ∆R of differences between treatments (∆R = ALAN - standard light) and between the time on which the startle response was induced ∆R (Night-Day). Between-individual variation and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
+<br> _Figure S4._ Forest plot for between-individual variation between treatment groups within periods and ∆R of differences between treatments (∆R = ALAN - Standard light) and between the time on which the startle response was induced ∆R (Night-Day). Between-individual variation and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
 <br>
 ```{r table VID}
-VID <- VID %>% 
+VID1 <- VID1 %>% 
    mutate_at(c( "mean","lower", "upper"),as.numeric) %>% 
    mutate_at(vars("mean","lower", "upper"), funs(round(., 3))) %>% 
    select("name", "mean","lower", "upper")
 
-repeat_VID<- c("Repeatability estimate", paste0("\u0394", " Variance"))
+repeat_VID1<- c("Repeatability estimate", paste0("\u0394", " Variance"))
 
-htmlTable(as.data.frame(VID[,-1]), 
+htmlTable(as.data.frame(VID1[,-1]), 
           header =   paste(c("Posterior mean","95% CI lower","95% CI upper")),
-          rnames = paste(c(Repeat$name)),
-          rgroup = c(repeat_VID),
+          rnames = paste(c(Repeat1$name)),
+          rgroup = c(repeat_VID1),
           n.rgroup = c(4, 4), 
           #          col.rgroup = c(rows=c(AD1),"#c95400"),
           #          col.rgroup = c(rows=c(AD2),"#c95400"),
           caption="Table S9:Between-individual variation (VBI) and differences in VBI (∆V) in startle response duration between treatment groups within time",
-          tfoot= "Differences between treatments and time (∆V) was estimated as ALAN - standard light and was Day - Night")
+          tfoot= "Differences between treatments and time (∆V) was estimated as ALAN - Standard light and was Day - Night")
 
 ```
 <br><br>
@@ -726,7 +745,7 @@ htmlTable(as.data.frame(VID[,-1]),
 ## Comparing within-individual variation across treatment groups and time on which startle response duration was measured
 
 <br>
-```{r WID, eval = TRUE,   warning=FALSE, include=TRUE}
+```{r WID, eval=TRUE,  warning=FALSE, include=TRUE}
 # Within-individual variation during PL treatment morning versus night  
 deltaVR_PL = VR_Day_PL - VR_Night_PL 
 # Within-individual variation during LD treatment morning versus night   
@@ -737,7 +756,7 @@ deltaVR_Day = VID_Day_PL - VID_Day_LD
 deltaVR_Night = VR_Night_PL - VR_Night_LD       
 
 WID<-data_frame(
-   name = c("Day - standard light", "Night - standard light", "Day - ALAN", "Night - ALAN",deltas),
+   name = c("Day - Standard light", "Night - Standard light", "Day - ALAN", "Night - ALAN",deltas),
    mean =  c(posterior.mode(VID_Day_LD), posterior.mode(VID_Night_LD),
              posterior.mode(VID_Day_PL), posterior.mode(VID_Night_PL),
              posterior.mode(deltaVR_PL), posterior.mode(deltaVR_LD), 
@@ -755,10 +774,17 @@ WID<-data_frame(
    Color = c("#a37d0b", "#52514e","#f2b90f", "#d19f0a", "#eda909", 
              "#7d786e", "#eda909", "#7d786e" ))
 
+WID1 <-  WID %>% 
+  mutate(name = str_replace(name, "LD", "- Standard light"),
+         name = str_replace(name, "PL", "- ALAN"),
+         name = str_replace(name, "Δ ", "Δ - "),
+         name = str_replace(name, "Δ - -", "Δ -"))
+
+
 ```
 
 ```{r plotvdi, fig.height=4, fig.width=6,}
-plt3 <- ggplot(WID, aes(x = name, y = mean, ymin = upper, ymax = lower)) +
+plt3 <- ggplot(WID1, aes(x = name, y = mean, ymin = upper, ymax = lower)) +
    geom_linerange(aes(color =  name), size = 1, alpha = 0.5) +
    geom_point(aes(color = name), position=position_dodge(width=c(0.6,0.4)), size = 3) +
    coord_flip() + labs(y = "Posterior mean", x = "Treatment") +  
@@ -773,25 +799,25 @@ plt3 +  scale_color_manual(values=c("orange", "orange","#172c3d", "orange",
    theme(legend.position = "none") 
 
 ```
-<br> _Figure S4._ Forest plot for within-individual variation between treatment groups within periods and ∆R of differences between treatments (∆R = ALAN - standard light) and between the time on which the startle response was induced ∆R (Night-Day). Within-individual variation and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
+<br> _Figure S4._ Forest plot for within-individual variation between treatment groups within periods and ∆R of differences between treatments (∆R = ALAN - Standard light) and between the time on which the startle response was induced ∆R (Night-Day). Within-individual variation and ∆ values were considered significant when 95% CIs of their posterior modes did not overlap zero.
 <br>
-```{r table WID}
-WID <- WID %>% 
+```{r table WID1}
+WID1 <- WID1 %>% 
    mutate_at(c( "mean","lower", "upper"),as.numeric) %>% 
    mutate_at(vars("mean","lower", "upper"), funs(round(., 3))) %>% 
    select("name", "mean","lower", "upper")
 
-repeat_VID<- c("Repeatability estimate", paste0("\u0394", " Variance"))
+repeat_WID1<- c("Repeatability estimate", paste0("\u0394", " Variance"))
 
-htmlTable(as.data.frame(WID[,-1]), 
+htmlTable(as.data.frame(WID1[,-1]), 
           header =   paste(c("Posterior mean","95% CI lower","95% CI upper")),
-          rnames = paste(c(Repeat$name)),
+          rnames = paste(c(WID1$name)),
           rgroup = c(repeat_VID),
           n.rgroup = c(4, 4), 
           #          col.rgroup = c(rows=c(AD1),"#c95400"),
           #          col.rgroup = c(rows=c(AD2),"#c95400"),
           caption="Table S10: Within-individual variation (VWI) and differences in VWI (∆V) in startle response duration between treatment groups within time",
-          tfoot= "Differences between treatments and time (∆V) was estimated as ALAN - standard light and was Day - Night")
+          tfoot= "Differences between treatments and time (∆V) was estimated as ALAN - Standard light and was Day - Night")
 
 ```
 <br><br>
@@ -799,79 +825,86 @@ htmlTable(as.data.frame(WID[,-1]),
 # 3. The effect of ALAN on metabolic rate
 
 <br>
-To investigate the effect of light pollution on the behaviour of hermit crabs, we used a two-way repeated-measures ANOVA. Metabolic rate was log-transformed (log~10~ +1). To ensure that the period on which it was collected (A or B) did not affect the hermit crab metabolic rate, we first compare whether metabolic rate varied according to the experimental period.
+To investigate the effect of light pollution on the behaviour of hermit crabs, a linear Linear mixed-effects model fit by REML. Metabolic rate was log-transformed (log~10~ +1). To account for the cross-over effect, we built a model containing a random intercept (i.e. individuals) and  random slopes (i.e. experimental period), indicating that individual slopes vary across different experimental periods).
+
 <br>
 
-```{r period comparison}
-MR=read.csv("data/MR1.csv", header=TRUE)
-id<-as.factor(MR$ID)
-period<-as.factor(MR$Period)
-Treat<-as.factor(MR$Treatment)
-time<-as.factor(MR$Time)
-metR<-as.numeric(MR$metabolic.rate)
-Period_AOV <- lmer(log10(metR+1) ~ period + (1|id), data=MR)
-Pr_result<- as.data.frame(anova(Period_AOV))
+```{r comp_mr, message=FALSE, warning=FALSE}
+MR <- read_csv("data/MR_res.csv", col_types = cols(ID = col_character(), 
+     Period = col_character(), Time = col_character())) %>% 
+  mutate(metR = log10(`metabolic rate` +1 )) %>% 
+  arrange(desc(Treatment))
 
-Period_L <- c("Sum Sq  ","Mean Sq  ", "NumDF  " ,
-              "DenDF  "  , "F value  ", "p  ") 
 
-Pr_result = Pr_result %>% mutate_at(c( "Sum Sq","Mean Sq", "NumDF" ,
-                                        "DenDF", "F value", "Pr(>F)" ),as.numeric) %>%
-   mutate_at(vars( "Sum Sq","Mean Sq", "NumDF" ,"DenDF", "F value", "Pr(>F)"), 
-             funs(round(., 4)))
+Period_int <- lmer(metR  ~ Treatment*Period*Treatment*Time +
+                     (Period|ID),
+                     data=MR)
 
-htmlTable(as.data.frame(Pr_result), 
-          header =   paste(c(Period_L)),
-          caption="Table S11: Results of repeated measures ANOVA, testing whether metabolic rate varied according with the period on which it was collected (A or B)",
-          rnames = paste("Perid"))
+
+MR_interact_res<- summary(Period_int)
+
+MR_interact_res = MR_interact_res$coefficients %>% 
+  data.frame() %>% 
+  rownames_to_column("headings") %>% 
+  rename(`Pr(>|z|)` = `Pr...t..`) %>% 
+  mutate(across(where(is.numeric), round, 3)) %>% 
+  mutate(`Pr(>|z|)` = as.character(`Pr(>|z|)`)) %>% 
+  mutate(`Pr(>|z|)` = case_when(
+    `Pr(>|z|)` < 0.0001 ~ "< 0.001",
+     TRUE ~ `Pr(>|z|)`)) %>% 
+  mutate(headings = str_remove(headings, "2"),
+         headings = str_remove(headings, "2"),
+         headings = str_remove(headings, "LL")) %>% 
+  column_to_rownames("headings") %>% 
+  rename(Std.Error = Std..Error)
+
+
+
+
+MR_interact_res_high <- which(MR_interact_res$`Pr(>|z|)` < 0.05 |
+                        MR_interact_res$`Pr(>|z|)` == "< 0.001" )
+
+MR_interact_res %>%
+  kable(caption = "Table S11:Results of LMM, the interactive effect of ALAN, time of the day and cross-over design on metabolic rate") %>% 
+kable_styling(full_width = T) %>%
+  row_spec(MR_interact_res_high, bold = T) %>% 
+    footnote(general = "Reference values: Treatment – ALAN; Period – B; Time - PM")
+
 ```
 
-<br>
-```{r results MR_1, warning=FALSE}
-MR_AOV <- lmer(log10(metR+1) ~ time*Treat + (1|id), data=MR)
-
-MR_result<- as.data.frame(anova(MR_AOV))
-
-MR__L <- c("Sum Sq  ","Mean Sq  ", "NumDF  " ,
-           "DenDF  "  , "F value  ", "p  ") 
-
-MR_result = MR_result %>% mutate_at(c( "Sum Sq","Mean Sq", "NumDF" ,"DenDF", 
-                                        "F value", "Pr(>F)" ),as.numeric) %>% 
-   mutate_at(vars( "Sum Sq","Mean Sq", "NumDF" ,"DenDF", "F value", "Pr(>F)"), funs(round(., 4)))
-
-htmlTable(as.data.frame(MR_result), 
-          header =   paste(c(Period_L)),
-          caption="Table S12: Results of repeated measures ANOVA, testing the effect of ALAN on metabolic rate",
-          rnames = paste(c("Time", "Treatment", "Treatment x Time")))
-```
-<br>
-<br>
-```{r results MR, eval = TRUE,  warning=FALSE, include=TRUE}
-MR_AOV <- lmer(log10(metR+1) ~ time*Treat + (1|id), data=MR)
-
-MR_result<- as.data.frame(anova(MR_AOV))
-
-MR__L <- c("Sum Sq  ","Mean Sq  ", "NumDF  " ,
-           "DenDF  "  , "F value  ", "p  ") 
-
-MR_result = MR_result %>% mutate_at(c( "Sum Sq","Mean Sq", "NumDF" ,"DenDF", 
-                                        "F value", "Pr(>F)" ),as.numeric) %>% 
-   mutate_at(vars( "Sum Sq","Mean Sq", "NumDF" ,"DenDF", "F value", "Pr(>F)"), funs(round(., 4)))
-```
-
-```{r html_table}
-htmlTable(as.data.frame(MR_result), 
-          header =   paste(c(Period_L)),
-          caption="Table S12: Results of repeated measures ANOVA, testing the effect of ALAN on metabolic rate",
-          rnames = paste(c("Time", "Treatment", "Treatment x Time")))
-```
-<br>
 <br><br>
 
-```{r plot_data_mr, eval = TRUE,  include=TRUE}
+As the MCMCglmm model did not achieve convergence when we specified an interaction between treatment group and haemocyanin, we test its effect independently. We used t-test as haemocyanin concentration was performed in a single animal at the end of the experiment. 
+
+```{r t_testhae}
+lightdark_tst <- lightdark %>% 
+  group_by(treatment, obs) %>%
+  summarise(haemoporc = mean(haemoporc)) 
+
+haemo_test <- t.test(log(haemoporc) ~ treatment, 
+                     data = lightdark_tst, var.equal = FALSE,
+                      alternative = c("two.sided")) %>% 
+  tidy() %>% 
+  dplyr::select(t= statistic, df = parameter, p.value ) %>% 
+  mutate(across(where(is.numeric), round, 3)) %>% 
+  as.data.frame()
+
+rownames(haemo_test) = "Haemocyanin concentration"
+
+havemo_h <- which(haemo_test$`p.value` < 0.05 |
+                        haemo_test$`p.value` == "< 0.001" )
+
+haemo_test  %>%
+  kable(caption = "Table S12: T-test results for the effect of treatent on Haemocyanin concentration") %>% 
+kable_styling(full_width = T) %>%
+  row_spec(havemo_h, bold = T)
+  
+```
+
+```{r plot_data_mr, eval=TRUE, include=TRUE}
 Mt<- MR %>% 
    group_by(Treatment) %>% 
-   ggplot(aes(y =log10(metabolic.rate +1), x = Treatment, fill =Treatment)) +
+   ggplot(aes(y =log10(metR +1), x = Treatment, fill =Treatment)) +
    geom_boxplot(size = 0.8, width = 0.4) + 
    labs(x = "", y = "Metabolic rate \n (log10 nmol O2 mg−1 h−1 STP)") +
   
@@ -886,7 +919,7 @@ Mt<- MR %>%
          text = element_text(size=15),
          legend.key.size = unit(1, 'cm')) +
    #coord_flip() +
-   scale_x_discrete(labels = c("standard light", "ALAN")) 
+   scale_x_discrete(labels = c("Standard light", "ALAN")) 
 
 g1<- lightdark %>% 
    group_by(treatment) %>% 
@@ -901,12 +934,12 @@ g1<- lightdark %>%
    theme(legend.position="top",
          text = element_text(size=15),
          legend.key.size = unit(1, 'cm'))+
-   scale_x_discrete(labels = c("standard light", "ALAN")) 
+   scale_x_discrete(labels = c("Standard light", "ALAN")) 
 
 
 haec <- lightdark %>% 
-  group_by(treatment, obs) %>% 
-  summarise(haemoporc = mean(haemoporc)) %>% 
+  group_by(treatment, obs) %>%
+  summarise(haemoporc = mean(haemoporc)) %>%
    ggplot(aes(x =treatment, y = haemoporc, fill =treatment )) +
    geom_boxplot(size = 0.8, width = 0.4) + 
    labs( y = expression(paste("Haemocyanin concentration (mMol ", 1^-1, ")")), 
@@ -922,21 +955,19 @@ haec <- lightdark %>%
          text = element_text(size=15),
          legend.key.size = unit(1, 'cm')) +
    #coord_flip() +
-   scale_x_discrete(labels = c("standard light", "ALAN")) 
+   scale_x_discrete(labels = c("Standard light", "ALAN")) 
 
 
 ggarrange(g1, Mt, haec,
           heights = c(1, 1,1),
           widths = c(1.2,1,1),
-          align='h', nrows = 1, 
-          ncols = 3, 
+          ncols = 3, nrows = 1,
           #labels=c('A', 'B', 'C'),
           common.legend = F)
 
 ggsave("g2.png",
         units="in", width=12, height= 9, dpi=600)
 ```
-
 _Fig S5._ The effect of ALAN on (A) boldness,  the (B) metabolic rate (MO2) and (C) haemocyanin concentration (mMol 1<sup>-1</sup>) in *Pagurus bernhardus*. Metabolic rate is expressed as log<sup>10</sup> nmol O<sub>2</sub> mg<sup>−1</sup> h<sup>−1 STP</sup> 
 
 
